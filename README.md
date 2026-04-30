@@ -32,10 +32,8 @@ bvim -v
 bvim -u
 ```
 
-Running `bvim` with no file starts a new-document flow. In a terminal, it asks
-for the document name and path before opening the editor. From a desktop
-launcher, such as Hyprland, the same name and path flow opens inside the app.
-There is no untitled scratch document.
+Running `bvim` with no file shows recent `.bvim` files and an option to create a
+new document. There is no untitled scratch document.
 
 In that flow, the document name is the filename. A path without a `.bvim`
 suffix is treated as a directory, so `hello.bvim` plus `~/Documents/bvim`

@@ -11,6 +11,8 @@ const documentsRoot = path.resolve(documentsDir);
 const workspaceRoot = path.resolve(process.env.BVIM_WORKSPACE || documentsDir);
 const initialFile = process.env.BVIM_INITIAL_FILE ? path.resolve(process.env.BVIM_INITIAL_FILE) : null;
 const port = Number(process.env.PORT || 8000);
+const stateDir = path.join(os.homedir(), ".local", "state", "bvim");
+const recentPath = path.join(stateDir, "recent.json");
 const allowedRoots = Array.from(
   new Set([documentsRoot, workspaceRoot, initialFile ? path.dirname(initialFile) : null].filter(Boolean))
 );
@@ -156,6 +158,71 @@ async function readJsonFile(fullPath) {
   return JSON.parse(raw);
 }
 
+async function readRecentDocuments() {
+  try {
+    const raw = await fs.readFile(recentPath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((entry) => entry && typeof entry.path === "string")
+      .map((entry) => ({ path: entry.path, openedAt: Number(entry.openedAt || 0) }));
+  } catch {
+    return [];
+  }
+}
+
+async function rememberRecentDocument(fullPath) {
+  const current = await readRecentDocuments();
+  const absolute = path.resolve(fullPath);
+  const next = [
+    { path: absolute, openedAt: Date.now() },
+    ...current.filter((entry) => path.resolve(entry.path) !== absolute)
+  ].slice(0, 100);
+  await fs.mkdir(stateDir, { recursive: true });
+  await fs.writeFile(recentPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+}
+
+async function listRecentDocuments() {
+  const recent = await readRecentDocuments();
+  const sorted = recent.slice().sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0));
+  const documents = [];
+
+  for (const entry of sorted) {
+    const absolute = path.resolve(entry.path);
+    if (!allowedRoots.some((root) => isInsideRoot(absolute, root))) {
+      continue;
+    }
+    try {
+      const stats = await fs.stat(absolute);
+      if (!stats.isFile()) {
+        continue;
+      }
+      let title = titleFromFileName(absolute);
+      try {
+        const document = await readJsonFile(absolute);
+        title = document.title || title;
+      } catch {
+        // A malformed file can still be opened; just fall back to the path title.
+      }
+      documents.push({
+        path: absolute,
+        file: displayFileName(absolute),
+        title,
+        openedAt: entry.openedAt || stats.mtimeMs || 0
+      });
+    } catch {
+      // Ignore stale recent files.
+    }
+    if (documents.length >= 30) {
+      break;
+    }
+  }
+
+  return documents;
+}
+
 const app = express();
 app.use(express.json({ limit: "40mb" }));
 
@@ -181,6 +248,14 @@ app.get("/api/path-completions", async (req, res) => {
       res.json({ completions: [] });
       return;
     }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/api/recent-documents", async (_req, res) => {
+  try {
+    res.json({ documents: await listRecentDocuments() });
+  } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
@@ -217,6 +292,7 @@ app.post("/api/document", async (req, res) => {
     };
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     await fs.writeFile(fullPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    await rememberRecentDocument(fullPath);
     res.json({ ok: true, file, savedAt: document.savedAt });
   } catch (error) {
     res.status(400).json({ error: error.message });

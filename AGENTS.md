@@ -15,9 +15,10 @@ For Chromium, keep the explicit keyboard-lock control because real hardware
 The reliable path for `Ctrl+W` is `npm run desktop`, which starts an Electron
 shell and forwards the reserved shortcut to the renderer without browser tab
 chrome closing the page.
-No-arg `bvim` must create or open a named document through a document-name and
-path flow before the editor opens. There should be no untitled scratch document
-concept. `bvim -h` remains the fast static help path.
+No-arg `bvim` must show recent `.bvim` files and an option to create a named
+document through a document-name and path flow before the editor opens. There
+should be no untitled scratch document concept. `bvim -h` remains the fast
+static help path.
 
 ## Architecture
 

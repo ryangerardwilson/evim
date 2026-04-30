@@ -407,6 +407,9 @@ export default function App() {
   const [blockPickerIndex, setBlockPickerIndex] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
+  const [creatingDocument, setCreatingDocument] = useState(false);
+  const [recentDocuments, setRecentDocuments] = useState([]);
+  const [recentIndex, setRecentIndex] = useState(0);
   const [setupTitle, setSetupTitle] = useState("");
   const [setupPath, setSetupPath] = useState("");
   const [pathCompletions, setPathCompletions] = useState([]);
@@ -462,14 +465,32 @@ export default function App() {
     setMessage(`${document.file || nextFile} opened`);
   }, []);
 
+  const loadRecentDocuments = useCallback(async () => {
+    try {
+      const response = await fetch("/api/recent-documents");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to load recent documents");
+      }
+      const documents = Array.isArray(payload.documents) ? payload.documents : [];
+      setRecentDocuments(documents);
+      setRecentIndex(0);
+      setCreatingDocument(documents.length === 0);
+      setMessage(documents.length ? "select recent or create new" : "name document");
+    } catch (error) {
+      setCreatingDocument(true);
+      setMessage(error.message);
+    }
+  }, []);
+
   useEffect(() => {
     if (!START_FILE) {
       setNeedsDocument(true);
-      setMessage("name document");
+      loadRecentDocuments();
       return;
     }
     loadDocument(START_FILE).catch((error) => setMessage(error.message));
-  }, [loadDocument]);
+  }, [loadDocument, loadRecentDocuments]);
 
   const saveDocument = useCallback(
     async (targetFile = fileName) => {
@@ -520,6 +541,7 @@ export default function App() {
         setSelectedId(nextBlocks[0]?.id || null);
         setDirty(false);
         setNeedsDocument(false);
+        setCreatingDocument(false);
         setPathCompletions([]);
         setMessage(`${existing.file || targetFile} opened`);
         return;
@@ -541,6 +563,7 @@ export default function App() {
       setSelectedId(starterBlocks[0].id);
       setDirty(false);
       setNeedsDocument(false);
+      setCreatingDocument(false);
       setPathCompletions([]);
       setMode("normal");
       setMessage(`${saved.file || targetFile} created`);
@@ -550,6 +573,22 @@ export default function App() {
       setSaving(false);
     }
   }, [setupPath, setupTitle]);
+
+  const openRecentDocument = useCallback(
+    async (document) => {
+      if (!document?.path) {
+        return;
+      }
+      try {
+        await loadDocument(document.path);
+        setCreatingDocument(false);
+      } catch (error) {
+        setMessage(error.message);
+        loadRecentDocuments();
+      }
+    },
+    [loadDocument, loadRecentDocuments]
+  );
 
   const applySetupPathValue = useCallback((nextValue) => {
     setSetupPath(nextValue);
@@ -865,10 +904,14 @@ export default function App() {
   }, [shortcutsOpen]);
 
   useEffect(() => {
-    if (needsDocument) {
+    if (needsDocument && creatingDocument) {
       setupTitleRef.current?.focus();
+      return;
     }
-  }, [needsDocument]);
+    if (needsDocument) {
+      editorRef.current?.focus();
+    }
+  }, [creatingDocument, needsDocument]);
 
   useEffect(() => {
     const unsubscribe = window.bvimDesktop?.onControlKey?.((key) => {
@@ -954,6 +997,34 @@ export default function App() {
       }
 
       if (needsDocument) {
+        if (typingTarget) {
+          return;
+        }
+
+        if (event.key === "n") {
+          event.preventDefault();
+          setCreatingDocument(true);
+          window.requestAnimationFrame(() => setupTitleRef.current?.focus());
+          return;
+        }
+
+        if (!creatingDocument && recentDocuments.length) {
+          if (event.key === "j" || event.key === "ArrowDown") {
+            event.preventDefault();
+            setRecentIndex((index) => Math.min(recentDocuments.length - 1, index + 1));
+            return;
+          }
+          if (event.key === "k" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setRecentIndex((index) => Math.max(0, index - 1));
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            openRecentDocument(recentDocuments[recentIndex]);
+            return;
+          }
+        }
         return;
       }
 
@@ -1090,11 +1161,15 @@ export default function App() {
     moveSelected,
     needsDocument,
     openBlockPicker,
+    openRecentDocument,
     saveDocument,
     selectByIndex,
     selectedBlock,
     selectedIndex,
-    shortcutsOpen
+    shortcutsOpen,
+    creatingDocument,
+    recentDocuments,
+    recentIndex
   ]);
 
   if (closed) {
@@ -1123,53 +1198,93 @@ export default function App() {
             <span className="brand-mark">b</span>
             <span>bvim</span>
           </div>
-          <label>
-            <span>document name</span>
-            <input
-              ref={setupTitleRef}
-              value={setupTitle}
-              onChange={(event) => setSetupTitle(event.target.value)}
-              onKeyDown={(event) =>
-                handleTextControlKeyDown(event, {
-                  setValue: setSetupTitle,
-                  onEnter: () => setupPathRef.current?.focus(),
-                  onEscape: () => editorRef.current?.focus()
-                })
-              }
-              aria-label="Document name"
-            />
-          </label>
-          <label>
-            <span>path</span>
-            <input
-              ref={setupPathRef}
-              value={setupPath}
-              placeholder="~/"
-              onChange={(event) => {
-                setSetupPath(event.target.value);
-                setPathCompletions([]);
-                setPathCompletionIndex(-1);
-              }}
-              onKeyDown={handleSetupPathKeyDown}
-              aria-label="Document path"
-            />
-            {pathCompletions.length > 0 && (
-              <div className="path-completions" aria-label="Path completions">
-                {pathCompletions.slice(0, 6).map((completion, index) => (
-                  <div
-                    key={`${completion.value}-${index}`}
-                    className={cx("path-completion", index === pathCompletionIndex && "active")}
+
+          {!creatingDocument && recentDocuments.length > 0 && (
+            <section className="recent-documents" aria-label="Recent documents">
+              <div className="setup-section-title">recent files</div>
+              <div className="recent-list">
+                {recentDocuments.map((document, index) => (
+                  <button
+                    key={document.path}
+                    type="button"
+                    className={cx("recent-document", index === recentIndex && "active")}
+                    onClick={() => openRecentDocument(document)}
+                    onMouseEnter={() => setRecentIndex(index)}
                   >
-                    <span>{completion.value}</span>
-                    <em>{completion.type}</em>
-                  </div>
+                    <strong>{document.title || document.file}</strong>
+                    <span>{document.file || document.path}</span>
+                  </button>
                 ))}
               </div>
-            )}
-          </label>
-          <button type="submit" disabled={saving}>
-            {saving ? "creating" : "create"}
-          </button>
+              <button type="button" className="secondary-action" onClick={() => setCreatingDocument(true)}>
+                new document
+              </button>
+            </section>
+          )}
+
+          {(creatingDocument || recentDocuments.length === 0) && (
+            <>
+              {recentDocuments.length > 0 && (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => {
+                    setCreatingDocument(false);
+                    editorRef.current?.focus();
+                  }}
+                >
+                  recent files
+                </button>
+              )}
+              <label>
+                <span>document name</span>
+                <input
+                  ref={setupTitleRef}
+                  value={setupTitle}
+                  onChange={(event) => setSetupTitle(event.target.value)}
+                  onKeyDown={(event) =>
+                    handleTextControlKeyDown(event, {
+                      setValue: setSetupTitle,
+                      onEnter: () => setupPathRef.current?.focus(),
+                      onEscape: () => editorRef.current?.focus()
+                    })
+                  }
+                  aria-label="Document name"
+                />
+              </label>
+              <label>
+                <span>path</span>
+                <input
+                  ref={setupPathRef}
+                  value={setupPath}
+                  placeholder="~/"
+                  onChange={(event) => {
+                    setSetupPath(event.target.value);
+                    setPathCompletions([]);
+                    setPathCompletionIndex(-1);
+                  }}
+                  onKeyDown={handleSetupPathKeyDown}
+                  aria-label="Document path"
+                />
+                {pathCompletions.length > 0 && (
+                  <div className="path-completions" aria-label="Path completions">
+                    {pathCompletions.slice(0, 6).map((completion, index) => (
+                      <div
+                        key={`${completion.value}-${index}`}
+                        className={cx("path-completion", index === pathCompletionIndex && "active")}
+                      >
+                        <span>{completion.value}</span>
+                        <em>{completion.type}</em>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </label>
+              <button type="submit" disabled={saving}>
+                {saving ? "creating" : "create"}
+              </button>
+            </>
+          )}
           <p className="setup-message">{message}</p>
         </form>
         {shortcutsOpen && <ShortcutsOverlay refValue={shortcutsRef} onClose={() => setShortcutsOpen(false)} />}

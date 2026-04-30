@@ -28,7 +28,7 @@ flags:
     upgrade through the installer
 
 features:
-  create a named document when no file is supplied
+  choose a recent document or create a new one
   # bvim
   bvim
 
@@ -103,6 +103,32 @@ async function rememberRecentDocument(filePath) {
   await fs.writeFile(recentPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 }
 
+async function listRecentDocuments() {
+  const recent = await readRecentDocuments();
+  const sorted = recent.slice().sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0));
+  const documents = [];
+
+  for (const entry of sorted) {
+    const absolute = path.resolve(entry.path);
+    try {
+      const stats = await fs.stat(absolute);
+      if (stats.isFile()) {
+        documents.push({
+          path: absolute,
+          openedAt: entry.openedAt || stats.mtimeMs || 0
+        });
+      }
+    } catch {
+      // Ignore stale recent files.
+    }
+    if (documents.length >= 30) {
+      break;
+    }
+  }
+
+  return documents;
+}
+
 function askLine(rl, question) {
   return new Promise((resolve) => rl.question(question, resolve));
 }
@@ -137,6 +163,69 @@ async function promptForDocument() {
     return { filePath, title };
   } finally {
     rl.close();
+  }
+}
+
+async function selectLaunchAction(documents) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return { type: "new" };
+  }
+
+  const options = [{ type: "new", label: "new document" }].concat(
+    documents.map((document) => ({
+      type: "open",
+      label: formatChoice(document.path),
+      filePath: document.path
+    }))
+  );
+  let index = 0;
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+
+  const render = () => {
+    process.stdout.write("\x1b[2J\x1b[H");
+    process.stdout.write("bvim\n\n");
+    options.forEach((option, itemIndex) => {
+      const marker = itemIndex === index ? ">" : " ";
+      process.stdout.write(`${marker} ${option.label}\n`);
+    });
+    process.stdout.write("\nenter open  n new  j/k move  q quit\n");
+  };
+
+  try {
+    render();
+    return await new Promise((resolve) => {
+      const onKeypress = (_text, key) => {
+        if (key.name === "down" || key.name === "j") {
+          index = Math.min(options.length - 1, index + 1);
+          render();
+          return;
+        }
+        if (key.name === "up" || key.name === "k") {
+          index = Math.max(0, index - 1);
+          render();
+          return;
+        }
+        if (key.name === "n") {
+          process.stdin.off("keypress", onKeypress);
+          resolve({ type: "new" });
+          return;
+        }
+        if (key.name === "return") {
+          process.stdin.off("keypress", onKeypress);
+          resolve(options[index]);
+          return;
+        }
+        if (key.name === "escape" || key.name === "q" || (key.ctrl && key.name === "c")) {
+          process.stdin.off("keypress", onKeypress);
+          resolve(null);
+        }
+      };
+      process.stdin.on("keypress", onKeypress);
+    });
+  } finally {
+    process.stdin.setRawMode(false);
+    process.stdout.write("\x1b[2J\x1b[H");
   }
 }
 
@@ -272,9 +361,17 @@ async function main(argv) {
       return runElectron({ filePath: null, port, needsDocument: true, workspacePath: os.homedir() });
     }
 
-    const prompted = await promptForDocument();
-    filePath = prompted.filePath;
-    await createDocumentIfMissing(filePath, prompted.title);
+    const action = await selectLaunchAction(await listRecentDocuments());
+    if (!action) {
+      return 0;
+    }
+    if (action.type === "new") {
+      const prompted = await promptForDocument();
+      filePath = prompted.filePath;
+      await createDocumentIfMissing(filePath, prompted.title);
+    } else {
+      filePath = action.filePath;
+    }
   } else {
     filePath = normalizeDocumentPath(argv[0]);
   }
