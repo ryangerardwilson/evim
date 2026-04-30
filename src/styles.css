@@ -199,7 +199,8 @@ textarea {
   display: block;
   width: 100%;
   min-height: 92px;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.58);

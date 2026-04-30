@@ -1320,6 +1320,48 @@ function ShortcutsOverlay({ refValue, onClose }) {
   );
 }
 
+function AutoGrowTextarea({ value, onValueChange, onExitInsert, className = "", spellCheck = "true" }) {
+  const textareaRef = useRef(null);
+
+  const resize = useCallback(() => {
+    const node = textareaRef.current;
+    if (!node) {
+      return;
+    }
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    resize();
+  }, [resize, value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      autoFocus
+      className={className}
+      value={value}
+      onChange={(event) => {
+        onValueChange(event.target.value);
+        window.requestAnimationFrame(resize);
+      }}
+      onInput={resize}
+      onKeyDown={(event) =>
+        handleTextControlKeyDown(event, {
+          setValue: (nextValue) => {
+            onValueChange(nextValue);
+            window.requestAnimationFrame(resize);
+          },
+          multiline: true,
+          onEscape: onExitInsert
+        })
+      }
+      spellCheck={spellCheck}
+    />
+  );
+}
+
 function BlockView({
   block,
   index,
@@ -1345,17 +1387,10 @@ function BlockView({
       <div className="block-body">
         {block.type === "text" && (
           insertMode ? (
-            <textarea
-              autoFocus
+            <AutoGrowTextarea
               value={block.content}
-              onChange={(event) => onUpdate({ content: event.target.value })}
-              onKeyDown={(event) =>
-                handleTextControlKeyDown(event, {
-                  setValue: (nextValue) => onUpdate({ content: nextValue }),
-                  multiline: true,
-                  onEscape: onExitInsert
-                })
-              }
+              onValueChange={(nextValue) => onUpdate({ content: nextValue })}
+              onExitInsert={onExitInsert}
               spellCheck="true"
             />
           ) : (
@@ -1367,18 +1402,11 @@ function BlockView({
           <>
             <div className="latex-render" dangerouslySetInnerHTML={{ __html: latexHtml }} />
             {insertMode && (
-              <textarea
-                autoFocus
+              <AutoGrowTextarea
                 className="latex-source"
                 value={block.content}
-                onChange={(event) => onUpdate({ content: event.target.value })}
-                onKeyDown={(event) =>
-                  handleTextControlKeyDown(event, {
-                    setValue: (nextValue) => onUpdate({ content: nextValue }),
-                    multiline: true,
-                    onEscape: onExitInsert
-                  })
-                }
+                onValueChange={(nextValue) => onUpdate({ content: nextValue })}
+                onExitInsert={onExitInsert}
                 spellCheck="false"
               />
             )}
