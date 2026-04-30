@@ -37,6 +37,10 @@ for the document name and path before opening the editor. From a desktop
 launcher, such as Hyprland, the same name and path flow opens inside the app.
 There is no untitled scratch document.
 
+In that flow, the document name is the filename. A path without a `.bvim`
+suffix is treated as a directory, so `hello.bvim` plus `~/Documents/bvim`
+creates `~/Documents/bvim/hello.bvim`.
+
 Each `bvim <file>` command starts its own local server on the first available
 port at or above `8000`, so multiple `.bvim` files can be open at the same time.
 

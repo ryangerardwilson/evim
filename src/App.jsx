@@ -5,6 +5,7 @@ import {
   Sigma,
   Type
 } from "lucide-react";
+import { resolveNamedDocumentPath, suggestedDocumentPath } from "./documentPaths.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -89,19 +90,6 @@ const KEYBOARD_LOCK_KEYS = [
   "Tab"
 ];
 let killRing = "";
-
-function slugifyTitle(value) {
-  const slug = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "document";
-}
-
-function suggestedDocumentPath(title) {
-  return `${slugifyTitle(title)}.bvim`;
-}
 
 function makeBlock(type) {
   const id = `block-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -500,7 +488,7 @@ export default function App() {
       return;
     }
 
-    const targetFile = setupPath.trim() || suggestedDocumentPath(nextTitle);
+    const targetFile = resolveNamedDocumentPath(nextTitle, setupPath);
     setSaving(true);
     try {
       const existingResponse = await fetch(`/api/document?file=${encodeURIComponent(targetFile)}`);

@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
+import { documentFileNameFromName, resolveNamedDocumentPath } from "../src/documentPaths.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
@@ -57,21 +58,8 @@ function normalizeDocumentPath(value) {
   return `${absolute}.bvim`;
 }
 
-function expandHome(value) {
-  return value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : value;
-}
-
 function stripDocumentExtension(value) {
   return value.replace(/\.bvim\.json$/i, "").replace(/\.bvim$/i, "");
-}
-
-function slugifyTitle(value) {
-  const slug = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "document";
 }
 
 function titleFromPath(filePath) {
@@ -120,28 +108,14 @@ function askLine(rl, question) {
 }
 
 async function resolvePromptPath(rawPath, title) {
-  const defaultPath = path.resolve(process.cwd(), `${slugifyTitle(title)}.bvim`);
+  const documentFileName = documentFileNameFromName(title);
+  const defaultPath = path.resolve(process.cwd(), documentFileName);
   const value = String(rawPath || "").trim();
   if (!value) {
     return defaultPath;
   }
 
-  const expanded = expandHome(value);
-  const absolute = path.resolve(process.cwd(), expanded);
-  if (value.endsWith("/") || value.endsWith(path.sep)) {
-    return normalizeDocumentPath(path.join(absolute, `${slugifyTitle(title)}.bvim`));
-  }
-
-  try {
-    const stats = await fs.stat(absolute);
-    if (stats.isDirectory()) {
-      return normalizeDocumentPath(path.join(absolute, `${slugifyTitle(title)}.bvim`));
-    }
-  } catch {
-    // The path can be a new file.
-  }
-
-  return normalizeDocumentPath(value);
+  return normalizeDocumentPath(resolveNamedDocumentPath(title, value));
 }
 
 async function promptForDocument() {
@@ -157,7 +131,7 @@ async function promptForDocument() {
       title = String(await askLine(rl, "document name: ")).trim();
     }
 
-    const defaultPath = path.resolve(process.cwd(), `${slugifyTitle(title)}.bvim`);
+    const defaultPath = path.resolve(process.cwd(), documentFileNameFromName(title));
     const rawPath = await askLine(rl, `path [${formatChoice(defaultPath)}]: `);
     const filePath = await resolvePromptPath(rawPath, title);
     return { filePath, title };
