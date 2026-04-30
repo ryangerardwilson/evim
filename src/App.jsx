@@ -137,6 +137,18 @@ function isEscapeKey(event) {
   );
 }
 
+function isEnterKey(event) {
+  const key = keyName(event);
+  return (
+    event.key === "Enter" ||
+    key === "Enter" ||
+    (event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      (key === "m" || event.code === "KeyM"))
+  );
+}
+
 function isCloseTabShortcut(event) {
   const key = keyName(event);
   return (event.ctrlKey || event.metaKey) && !event.altKey && key === "w";
@@ -1032,7 +1044,7 @@ export default function App() {
             setRecentIndex((index) => Math.max(0, index - 1));
             return;
           }
-          if (event.key === "Enter") {
+          if (isEnterKey(event)) {
             event.preventDefault();
             openRecentDocument(recentDocuments[recentIndex]);
             return;
@@ -1074,7 +1086,7 @@ export default function App() {
           return;
         }
 
-        if (event.key === "Enter") {
+        if (isEnterKey(event)) {
           event.preventDefault();
           chooseBlockType(BLOCK_TYPES[blockPickerIndex].type);
           return;
@@ -1129,7 +1141,7 @@ export default function App() {
         return;
       }
 
-      if (event.key === "i" || event.key === "Enter") {
+      if (event.key === "i" || isEnterKey(event)) {
         event.preventDefault();
         if (selectedBlock) {
           setMode("insert");

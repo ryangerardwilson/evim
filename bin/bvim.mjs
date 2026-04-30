@@ -140,6 +140,15 @@ async function resolvePromptPath(rawPath, title) {
   return normalizeDocumentPath(resolveNamedDocumentPath(title, value));
 }
 
+function isTerminalEnterKey(key) {
+  return (
+    key.name === "return" ||
+    key.name === "enter" ||
+    key.sequence === "\r" ||
+    (key.ctrl && key.name === "m")
+  );
+}
+
 function renderDocumentPrompt({ step, title, rawPath, message = "" }) {
   const defaultPath = title ? path.resolve(process.cwd(), documentFileNameFromName(title)) : "";
   process.stdout.write("\x1b[2J\x1b[H");
@@ -208,7 +217,7 @@ async function promptForDocument({ allowBack = false } = {}) {
           return;
         }
 
-        if (key.name === "return") {
+        if (isTerminalEnterKey(key)) {
           if (step === "title") {
             title = title.trim();
             if (!title) {
@@ -288,7 +297,7 @@ async function selectLaunchAction(documents) {
           resolve({ type: "new" });
           return;
         }
-        if (key.name === "return") {
+        if (isTerminalEnterKey(key)) {
           process.stdin.off("keypress", onKeypress);
           resolve(options[index]);
           return;
