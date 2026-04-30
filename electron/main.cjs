@@ -92,9 +92,10 @@ async function createWindow() {
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
-    minWidth: 900,
-    minHeight: 580,
-    backgroundColor: "#000000",
+    minWidth: 420,
+    minHeight: 360,
+    backgroundColor: "#00000000",
+    transparent: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
