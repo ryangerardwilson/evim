@@ -454,6 +454,42 @@ textarea:focus {
   border-color: var(--accent);
 }
 
+.path-completions {
+  display: grid;
+  gap: 1px;
+  margin-top: 2px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.path-completion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.path-completion.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.path-completion span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-completion em {
+  color: var(--faint);
+  font-style: normal;
+}
+
 .setup-form button {
   height: 32px;
   border: 1px solid var(--accent);

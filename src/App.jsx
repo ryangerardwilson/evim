@@ -5,7 +5,7 @@ import {
   Sigma,
   Type
 } from "lucide-react";
-import { resolveNamedDocumentPath, suggestedDocumentPath } from "./documentPaths.js";
+import { resolveNamedDocumentPath } from "./documentPaths.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -207,6 +207,19 @@ function placeCaret(target, start, end = start) {
   });
 }
 
+function longestCommonPrefix(values) {
+  if (!values.length) {
+    return "";
+  }
+  let prefix = values[0];
+  for (const value of values.slice(1)) {
+    while (prefix && !value.startsWith(prefix)) {
+      prefix = prefix.slice(0, -1);
+    }
+  }
+  return prefix;
+}
+
 function commitTextValue(target, setValue, nextValue, start, end = start) {
   setValue(nextValue);
   placeCaret(target, start, end);
@@ -396,6 +409,8 @@ export default function App() {
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
   const [setupTitle, setSetupTitle] = useState("");
   const [setupPath, setSetupPath] = useState("");
+  const [pathCompletions, setPathCompletions] = useState([]);
+  const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
   const editorRef = useRef(null);
@@ -505,6 +520,7 @@ export default function App() {
         setSelectedId(nextBlocks[0]?.id || null);
         setDirty(false);
         setNeedsDocument(false);
+        setPathCompletions([]);
         setMessage(`${existing.file || targetFile} opened`);
         return;
       }
@@ -525,6 +541,7 @@ export default function App() {
       setSelectedId(starterBlocks[0].id);
       setDirty(false);
       setNeedsDocument(false);
+      setPathCompletions([]);
       setMode("normal");
       setMessage(`${saved.file || targetFile} created`);
     } catch (error) {
@@ -533,6 +550,98 @@ export default function App() {
       setSaving(false);
     }
   }, [setupPath, setupTitle]);
+
+  const applySetupPathValue = useCallback((nextValue) => {
+    setSetupPath(nextValue);
+    window.requestAnimationFrame(() => {
+      setupPathRef.current?.focus();
+      setupPathRef.current?.setSelectionRange(nextValue.length, nextValue.length);
+    });
+  }, []);
+
+  const completeSetupPath = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/path-completions?path=${encodeURIComponent(setupPath)}`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "path completion failed");
+      }
+
+      const completions = Array.isArray(payload.completions) ? payload.completions : [];
+      const values = completions.map((completion) => completion.value).filter(Boolean);
+      setPathCompletions(completions);
+
+      if (!values.length) {
+        setPathCompletionIndex(-1);
+        setMessage("no path matches");
+        return;
+      }
+
+      const prefix = longestCommonPrefix(values);
+      if (prefix.length > setupPath.length) {
+        applySetupPathValue(prefix);
+        setPathCompletionIndex(-1);
+        setMessage(`${values.length} path match${values.length === 1 ? "" : "es"}`);
+        return;
+      }
+
+      const currentIndex = values.indexOf(setupPath);
+      const nextIndex =
+        currentIndex >= 0
+          ? (currentIndex + 1) % values.length
+          : (pathCompletionIndex + 1 + values.length) % values.length;
+      applySetupPathValue(values[nextIndex]);
+      setPathCompletionIndex(nextIndex);
+      setMessage(`${nextIndex + 1}/${values.length} ${completions[nextIndex].type}`);
+    } catch (error) {
+      setMessage(error.message);
+      setPathCompletions([]);
+      setPathCompletionIndex(-1);
+    }
+  }, [applySetupPathValue, pathCompletionIndex, setupPath]);
+
+  const handleSetupPathKeyDown = useCallback(
+    (event) => {
+      const key = keyName(event);
+      const isCompletionKey =
+        event.key === "Tab" ||
+        (event.ctrlKey && !event.altKey && !event.metaKey && (key === "i" || event.code === "KeyI"));
+
+      if (isCompletionKey) {
+        event.preventDefault();
+        completeSetupPath();
+        return;
+      }
+
+      if (pathCompletions.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex =
+          (pathCompletionIndex + direction + pathCompletions.length) % pathCompletions.length;
+        applySetupPathValue(pathCompletions[nextIndex].value);
+        setPathCompletionIndex(nextIndex);
+        setMessage(`${nextIndex + 1}/${pathCompletions.length} ${pathCompletions[nextIndex].type}`);
+        return;
+      }
+
+      handleTextControlKeyDown(event, {
+        setValue: (nextValue) => {
+          setSetupPath(nextValue);
+          setPathCompletions([]);
+          setPathCompletionIndex(-1);
+        },
+        onEnter: createNamedDocument,
+        onEscape: () => setupTitleRef.current?.focus()
+      });
+    },
+    [
+      applySetupPathValue,
+      completeSetupPath,
+      createNamedDocument,
+      pathCompletionIndex,
+      pathCompletions
+    ]
+  );
 
   const closeEditor = useCallback(() => {
     forceQuitRef.current = true;
@@ -1035,17 +1144,28 @@ export default function App() {
             <input
               ref={setupPathRef}
               value={setupPath}
-              placeholder={suggestedDocumentPath(setupTitle)}
-              onChange={(event) => setSetupPath(event.target.value)}
-              onKeyDown={(event) =>
-                handleTextControlKeyDown(event, {
-                  setValue: setSetupPath,
-                  onEnter: createNamedDocument,
-                  onEscape: () => setupTitleRef.current?.focus()
-                })
-              }
+              placeholder="~/"
+              onChange={(event) => {
+                setSetupPath(event.target.value);
+                setPathCompletions([]);
+                setPathCompletionIndex(-1);
+              }}
+              onKeyDown={handleSetupPathKeyDown}
               aria-label="Document path"
             />
+            {pathCompletions.length > 0 && (
+              <div className="path-completions" aria-label="Path completions">
+                {pathCompletions.slice(0, 6).map((completion, index) => (
+                  <div
+                    key={`${completion.value}-${index}`}
+                    className={cx("path-completion", index === pathCompletionIndex && "active")}
+                  >
+                    <span>{completion.value}</span>
+                    <em>{completion.type}</em>
+                  </div>
+                ))}
+              </div>
+            )}
           </label>
           <button type="submit" disabled={saving}>
             {saving ? "creating" : "create"}

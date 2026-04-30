@@ -47,6 +47,60 @@ function isInsideRoot(candidate, root) {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
+function completionPathInfo(rawValue) {
+  const raw = String(rawValue || "");
+  const value = raw.trim();
+  const home = os.homedir();
+
+  if (!value || value === "~" || value === "~/") {
+    return { lookupDir: home, partial: "", displayBase: "~/" };
+  }
+
+  const expanded = expandHome(value);
+  const absolute = path.resolve(workspaceRoot, expanded);
+  const endsWithSeparator = /[\\/]$/.test(value);
+
+  if (endsWithSeparator) {
+    return {
+      lookupDir: absolute,
+      partial: "",
+      displayBase: value
+    };
+  }
+
+  const partial = path.basename(expanded);
+  const lookupDir = path.dirname(absolute);
+  const displayBase = value.slice(0, Math.max(0, value.length - partial.length));
+  return { lookupDir, partial, displayBase };
+}
+
+async function completePath(rawValue) {
+  const { lookupDir, partial, displayBase } = completionPathInfo(rawValue);
+  const resolvedDir = path.resolve(lookupDir);
+
+  if (!allowedRoots.some((root) => isInsideRoot(resolvedDir, root))) {
+    return [];
+  }
+
+  const entries = await fs.readdir(resolvedDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.name.startsWith("."))
+    .filter((entry) => entry.name.toLowerCase().startsWith(partial.toLowerCase()))
+    .filter((entry) => entry.isDirectory() || hasDocumentExtension(entry.name) || entry.name.endsWith(".json"))
+    .map((entry) => ({
+      name: entry.name,
+      type: entry.isDirectory() ? "directory" : "file",
+      value: `${displayBase}${entry.name}${entry.isDirectory() ? "/" : ""}`
+    }))
+    .sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 20);
+}
+
 function displayFileName(fullPath) {
   if (isInsideRoot(fullPath, documentsRoot)) {
     return path.basename(fullPath);
@@ -116,6 +170,19 @@ app.get("/api/documents", async (_req, res) => {
 
 app.get("/api/health", (_req, res) => {
   res.json({ app: "bvim", ok: true });
+});
+
+app.get("/api/path-completions", async (req, res) => {
+  try {
+    const completions = await completePath(req.query.path);
+    res.json({ completions });
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR" || error.code === "EACCES") {
+      res.json({ completions: [] });
+      return;
+    }
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.get("/api/document", async (req, res) => {
