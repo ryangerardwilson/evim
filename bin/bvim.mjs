@@ -129,10 +129,6 @@ async function listRecentDocuments() {
   return documents;
 }
 
-function askLine(rl, question) {
-  return new Promise((resolve) => rl.question(question, resolve));
-}
-
 async function resolvePromptPath(rawPath, title) {
   const documentFileName = documentFileNameFromName(title);
   const defaultPath = path.resolve(process.cwd(), documentFileName);
@@ -144,25 +140,106 @@ async function resolvePromptPath(rawPath, title) {
   return normalizeDocumentPath(resolveNamedDocumentPath(title, value));
 }
 
-async function promptForDocument() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+function renderDocumentPrompt({ step, title, rawPath, message = "" }) {
+  const defaultPath = title ? path.resolve(process.cwd(), documentFileNameFromName(title)) : "";
+  process.stdout.write("\x1b[2J\x1b[H");
+  process.stdout.write("bvim new document\n\n");
+  process.stdout.write(`document name: ${title}${step === "title" ? "_" : ""}\n`);
+  if (step === "path") {
+    process.stdout.write(`path [${formatChoice(defaultPath)}]: ${rawPath}_\n`);
+  } else if (title) {
+    process.stdout.write(`path [${formatChoice(defaultPath)}]:\n`);
+  }
+  process.stdout.write("\nenter next  esc back\n");
+  if (message) {
+    process.stdout.write(`${message}\n`);
+  }
+}
+
+async function promptForDocument({ allowBack = false } = {}) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return { type: "back" };
+  }
+
+  let step = "title";
+  let title = "";
+  let rawPath = "";
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  renderDocumentPrompt({ step, title, rawPath });
 
   try {
-    process.stdout.write("bvim new document\n\n");
-    let title = "";
-    while (!title) {
-      title = String(await askLine(rl, "document name: ")).trim();
-    }
+    return await new Promise((resolve) => {
+      const finish = async () => {
+        const filePath = await resolvePromptPath(rawPath, title);
+        process.stdin.off("keypress", onKeypress);
+        resolve({ type: "document", filePath, title });
+      };
 
-    const defaultPath = path.resolve(process.cwd(), documentFileNameFromName(title));
-    const rawPath = await askLine(rl, `path [${formatChoice(defaultPath)}]: `);
-    const filePath = await resolvePromptPath(rawPath, title);
-    return { filePath, title };
+      const onKeypress = (text, key) => {
+        const activeValue = step === "title" ? title : rawPath;
+        const setActiveValue = (nextValue) => {
+          if (step === "title") {
+            title = nextValue;
+          } else {
+            rawPath = nextValue;
+          }
+        };
+
+        if (key.name === "escape") {
+          if (step === "path") {
+            step = "title";
+            renderDocumentPrompt({ step, title, rawPath });
+            return;
+          }
+          if (allowBack) {
+            process.stdin.off("keypress", onKeypress);
+            resolve({ type: "back" });
+            return;
+          }
+          process.stdin.off("keypress", onKeypress);
+          resolve(null);
+          return;
+        }
+
+        if (key.ctrl && key.name === "c") {
+          process.stdin.off("keypress", onKeypress);
+          resolve(null);
+          return;
+        }
+
+        if (key.name === "return") {
+          if (step === "title") {
+            title = title.trim();
+            if (!title) {
+              renderDocumentPrompt({ step, title, rawPath, message: "document name required" });
+              return;
+            }
+            step = "path";
+            renderDocumentPrompt({ step, title, rawPath });
+            return;
+          }
+          finish();
+          return;
+        }
+
+        if (key.name === "backspace") {
+          setActiveValue(activeValue.slice(0, -1));
+          renderDocumentPrompt({ step, title, rawPath });
+          return;
+        }
+
+        if (text && !key.ctrl && !key.meta && text >= " ") {
+          setActiveValue(`${activeValue}${text}`);
+          renderDocumentPrompt({ step, title, rawPath });
+        }
+      };
+
+      process.stdin.on("keypress", onKeypress);
+    });
   } finally {
-    rl.close();
+    process.stdin.setRawMode(false);
+    process.stdout.write("\x1b[2J\x1b[H");
   }
 }
 
@@ -361,12 +438,19 @@ async function main(argv) {
       return runElectron({ filePath: null, port, needsDocument: true, workspacePath: os.homedir() });
     }
 
-    const action = await selectLaunchAction(await listRecentDocuments());
+    const recentDocuments = await listRecentDocuments();
+    const action = await selectLaunchAction(recentDocuments);
     if (!action) {
       return 0;
     }
     if (action.type === "new") {
-      const prompted = await promptForDocument();
+      const prompted = await promptForDocument({ allowBack: recentDocuments.length > 0 });
+      if (!prompted) {
+        return 0;
+      }
+      if (prompted.type === "back") {
+        return main([]);
+      }
       filePath = prompted.filePath;
       await createDocumentIfMissing(filePath, prompted.title);
     } else {

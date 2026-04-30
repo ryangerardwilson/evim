@@ -639,6 +639,18 @@ export default function App() {
     }
   }, [applySetupPathValue, pathCompletionIndex, setupPath]);
 
+  const returnToRecentMenu = useCallback(() => {
+    if (recentDocuments.length > 0) {
+      setCreatingDocument(false);
+      setPathCompletions([]);
+      setPathCompletionIndex(-1);
+      setMessage("select recent or create new");
+      window.requestAnimationFrame(() => editorRef.current?.focus());
+      return;
+    }
+    editorRef.current?.focus();
+  }, [recentDocuments.length]);
+
   const handleSetupPathKeyDown = useCallback(
     (event) => {
       const key = keyName(event);
@@ -670,7 +682,7 @@ export default function App() {
           setPathCompletionIndex(-1);
         },
         onEnter: createNamedDocument,
-        onEscape: () => setupTitleRef.current?.focus()
+        onEscape: returnToRecentMenu
       });
     },
     [
@@ -678,7 +690,8 @@ export default function App() {
       completeSetupPath,
       createNamedDocument,
       pathCompletionIndex,
-      pathCompletions
+      pathCompletions,
+      returnToRecentMenu
     ]
   );
 
@@ -1246,7 +1259,7 @@ export default function App() {
                     handleTextControlKeyDown(event, {
                       setValue: setSetupTitle,
                       onEnter: () => setupPathRef.current?.focus(),
-                      onEscape: () => editorRef.current?.focus()
+                      onEscape: returnToRecentMenu
                     })
                   }
                   aria-label="Document name"
