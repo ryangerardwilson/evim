@@ -60,11 +60,13 @@ install_from_archive() {
   need node
   need tar
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' RETURN
 
   tar -xzf "$archive" -C "$tmp_dir"
   source_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-  [ -n "$source_dir" ] || die "archive did not contain a source directory"
+  if [ -z "$source_dir" ]; then
+    rm -rf "$tmp_dir"
+    die "archive did not contain a source directory"
+  fi
 
   rm -rf "$APP_DIR"
   mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
@@ -80,6 +82,7 @@ install_from_archive() {
 
   "$LAUNCHER" -v >/dev/null
   printf 'installed bvim %s\n' "$("$LAUNCHER" -v)"
+  rm -rf "$tmp_dir"
 }
 
 install_version() {
@@ -89,9 +92,9 @@ install_version() {
   need curl
   url="$(archive_url_for_version "$version")"
   archive="$(mktemp)"
-  trap 'rm -f "$archive"' RETURN
   curl -fsSL "$url" -o "$archive"
   install_from_archive "$archive"
+  rm -f "$archive"
 }
 
 upgrade_latest() {
