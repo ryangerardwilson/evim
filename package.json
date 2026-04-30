@@ -1,0 +1,28 @@
+{
+  "name": "bvim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bvim": "./bin/bvim.mjs"
+  },
+  "scripts": {
+    "cli": "node bin/bvim.mjs",
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "desktop": "electron --in-process-gpu --disable-gpu-sandbox --disable-vulkan --disable-features=Vulkan,VulkanFromANGLE electron/main.cjs",
+    "build": "vite build",
+    "test": "node --test test/*.test.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 8000"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
+    "electron": "^41.3.0",
+    "express": "^5.2.1",
+    "katex": "^0.16.25",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vite": "^7.3.0"
+  }
+}

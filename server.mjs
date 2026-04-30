@@ -1,0 +1,174 @@
+import express from "express";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createServer as createViteServer } from "vite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const documentsDir = path.join(__dirname, "documents");
+const documentsRoot = path.resolve(documentsDir);
+const workspaceRoot = path.resolve(process.env.BVIM_WORKSPACE || documentsDir);
+const initialFile = process.env.BVIM_INITIAL_FILE ? path.resolve(process.env.BVIM_INITIAL_FILE) : null;
+const port = Number(process.env.PORT || 8000);
+const allowedRoots = Array.from(
+  new Set([documentsRoot, workspaceRoot, initialFile ? path.dirname(initialFile) : null].filter(Boolean))
+);
+
+await fs.mkdir(documentsDir, { recursive: true });
+
+function hasDocumentExtension(value) {
+  return value.endsWith(".bvim") || value.endsWith(".bvim.json");
+}
+
+function withDocumentExtension(value) {
+  if (hasDocumentExtension(value)) {
+    return value;
+  }
+  if (value.endsWith(".json")) {
+    return value.replace(/\.json$/, ".bvim");
+  }
+  return `${value}.bvim`;
+}
+
+function expandHome(value) {
+  return value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : value;
+}
+
+function stripDocumentExtension(value) {
+  return value.replace(/\.bvim\.json$/i, "").replace(/\.bvim$/i, "");
+}
+
+function titleFromFileName(file) {
+  return stripDocumentExtension(path.basename(file)).replace(/[-_]+/g, " ") || "document";
+}
+
+function isInsideRoot(candidate, root) {
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+
+function displayFileName(fullPath) {
+  if (isInsideRoot(fullPath, documentsRoot)) {
+    return path.basename(fullPath);
+  }
+  if (isInsideRoot(fullPath, workspaceRoot)) {
+    const relative = path.relative(workspaceRoot, fullPath);
+    return relative || path.basename(fullPath);
+  }
+  return fullPath;
+}
+
+function resolveDocumentPath(value) {
+  const raw = String(value || initialFile || "").trim();
+  if (!raw) {
+    throw new Error("document path is required");
+  }
+  const input = expandHome(raw);
+  const baseDir = initialFile ? path.dirname(initialFile) : workspaceRoot;
+  const unresolved = path.isAbsolute(input) ? input : path.resolve(baseDir, input);
+  const fullPath = path.resolve(withDocumentExtension(unresolved));
+
+  if (!hasDocumentExtension(fullPath)) {
+    throw new Error("bvim documents must end in .bvim");
+  }
+
+  if (!allowedRoots.some((root) => isInsideRoot(fullPath, root))) {
+    throw new Error("document path is outside this bvim session");
+  }
+
+  return { file: displayFileName(fullPath), fullPath };
+}
+
+function createStarterDocument(file, title = titleFromFileName(file)) {
+  return {
+    app: "bvim",
+    version: 1,
+    file,
+    title,
+    savedAt: null,
+    blocks: [
+      {
+        id: `block-${Date.now()}-text`,
+        type: "text",
+        content: "",
+        meta: {}
+      }
+    ]
+  };
+}
+
+async function readJsonFile(fullPath) {
+  const raw = await fs.readFile(fullPath, "utf8");
+  return JSON.parse(raw);
+}
+
+const app = express();
+app.use(express.json({ limit: "40mb" }));
+
+app.get("/api/documents", async (_req, res) => {
+  const entries = await fs.readdir(documentsDir, { withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile() && hasDocumentExtension(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+  res.json({ files });
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({ app: "bvim", ok: true });
+});
+
+app.get("/api/document", async (req, res) => {
+  try {
+    const { file, fullPath } = resolveDocumentPath(req.query.file);
+    try {
+      const document = await readJsonFile(fullPath);
+      res.json({ ...document, file, exists: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      res.json({ ...createStarterDocument(file), exists: false });
+    }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/document", async (req, res) => {
+  try {
+    const { file, fullPath } = resolveDocumentPath(req.body?.file);
+    const blocks = Array.isArray(req.body?.blocks) ? req.body.blocks : [];
+    const title = String(req.body?.title || titleFromFileName(file)).slice(0, 160);
+    const document = {
+      app: "bvim",
+      version: 1,
+      file,
+      title,
+      savedAt: new Date().toISOString(),
+      blocks
+    };
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    res.json({ ok: true, file, savedAt: document.savedAt });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+const vite = await createViteServer({
+  root: __dirname,
+  appType: "spa",
+  server: {
+    middlewareMode: true,
+    hmr: {
+      port: port + 10000
+    }
+  }
+});
+
+app.use(vite.middlewares);
+
+app.listen(port, "127.0.0.1", () => {
+  console.log(`bvim running at http://localhost:${port}`);
+});
