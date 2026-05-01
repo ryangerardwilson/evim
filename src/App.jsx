@@ -30,10 +30,6 @@ const SHORTCUT_GROUPS = [
       [":edit", "open current file in vim"],
       [":38", "open current file at line 38"],
       [":r", "reload current file"],
-      [":q", "quit"],
-      [":q!", "quit"],
-      [":w", "reload from disk"],
-      [":wq", "quit"],
       [":lock", "request keyboard lock"]
     ]
   },
@@ -949,15 +945,10 @@ export default function App() {
       }
 
       try {
-        if (value === "w" || value === "r" || value === "reload") {
+        if (value === "r" || value === "reload") {
           await reloadDocument();
           setMode("normal");
           setMessage(`${fileName} reloaded`);
-          return;
-        }
-
-        if (value === "wq" || value === "x" || value === "q" || value === "q!") {
-          closeEditor();
           return;
         }
 
@@ -993,7 +984,7 @@ export default function App() {
         setMode("normal");
       }
     },
-    [closeEditor, fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock]
+    [fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock]
   );
 
   useEffect(() => {
