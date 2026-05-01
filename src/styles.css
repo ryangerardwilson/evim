@@ -163,7 +163,7 @@ button {
   border-left: 2px solid transparent;
   background: rgba(0, 0, 0, 0.42);
   box-shadow: none;
-  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .block:hover {
@@ -174,7 +174,6 @@ button {
   border-color: var(--accent);
   background: rgba(8, 8, 8, 0.78);
   box-shadow: var(--shadow);
-  transform: translateX(1px);
 }
 
 .block-number {
