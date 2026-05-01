@@ -28,9 +28,11 @@ const SHORTCUT_GROUPS = [
       ["J / K", "move selected block down / up"],
       ["i / enter", "edit selected block"],
       ["o / O", "insert text block after / before"],
+      ["yy", "copy selected block"],
+      ["p / P", "paste block after / before"],
       ["x", "delete selected block"],
       [":", "command line"],
-      ["ctrl+q", "quit bvim"]
+      ["ctrl+c", "quit bvim"]
     ]
   },
   {
@@ -75,6 +77,7 @@ const KEYBOARD_LOCK_KEYS = [
   "Enter",
   "KeyA",
   "KeyB",
+  "KeyC",
   "KeyD",
   "KeyE",
   "KeyF",
@@ -91,8 +94,12 @@ const KEYBOARD_LOCK_KEYS = [
 ];
 let killRing = "";
 
+function makeBlockId() {
+  return `block-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function makeBlock(type) {
-  const id = `block-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const id = makeBlockId();
   if (type === "latex") {
     return { id, type, content: "E = mc^2", meta: {} };
   }
@@ -100,6 +107,14 @@ function makeBlock(type) {
     return { id, type, content: "", meta: { name: "", caption: "" } };
   }
   return { id, type: "text", content: "", meta: {} };
+}
+
+function cloneBlock(block) {
+  return {
+    ...block,
+    id: makeBlockId(),
+    meta: { ...(block.meta || {}) }
+  };
 }
 
 function cx(...parts) {
@@ -426,6 +441,7 @@ export default function App() {
   const [setupPath, setSetupPath] = useState("");
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
+  const [copiedBlock, setCopiedBlock] = useState(null);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
   const editorRef = useRef(null);
@@ -434,6 +450,7 @@ export default function App() {
   const setupPathRef = useRef(null);
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
+  const pendingKeyRef = useRef("");
 
   const selectedIndex = useMemo(
     () => blocks.findIndex((block) => block.id === selectedId),
@@ -803,6 +820,40 @@ export default function App() {
     markDirty();
   }, [blocks, markDirty, selectedBlock, selectedIndex]);
 
+  const copySelectedBlock = useCallback(() => {
+    if (!selectedBlock) {
+      setMessage("no block selected");
+      return;
+    }
+    setCopiedBlock(cloneBlock(selectedBlock));
+    setMessage(`copied ${selectedBlock.type} block`);
+  }, [selectedBlock]);
+
+  const pasteCopiedBlock = useCallback(
+    (offset = 1) => {
+      if (!copiedBlock) {
+        setMessage("nothing to paste");
+        return;
+      }
+
+      const block = cloneBlock(copiedBlock);
+      setBlocks((current) => {
+        const next = [...current];
+        const insertIndex =
+          selectedIndex >= 0
+            ? Math.max(0, Math.min(current.length, selectedIndex + offset))
+            : current.length;
+        next.splice(insertIndex, 0, block);
+        return next;
+      });
+      setSelectedId(block.id);
+      setMode("normal");
+      setMessage(`pasted ${block.type} block`);
+      markDirty();
+    },
+    [copiedBlock, markDirty, selectedIndex]
+  );
+
   const moveSelected = useCallback(
     (direction) => {
       if (selectedIndex < 0) {
@@ -1001,7 +1052,7 @@ export default function App() {
       const typingTarget = tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable;
       const key = keyName(event);
 
-      if (event.ctrlKey && !event.altKey && !event.metaKey && key === "q") {
+      if (event.ctrlKey && !event.altKey && !event.metaKey && key === "c") {
         event.preventDefault();
         closeEditor();
         return;
@@ -1104,6 +1155,15 @@ export default function App() {
         return;
       }
 
+      if (pendingKeyRef.current === "y") {
+        pendingKeyRef.current = "";
+        if (!event.ctrlKey && !event.altKey && !event.metaKey && event.key === "y") {
+          event.preventDefault();
+          copySelectedBlock();
+          return;
+        }
+      }
+
       if (event.ctrlKey && !event.altKey && !event.metaKey && key === "s") {
         event.preventDefault();
         saveDocument().catch((error) => setMessage(error.message));
@@ -1167,6 +1227,25 @@ export default function App() {
         return;
       }
 
+      if (event.key === "y") {
+        event.preventDefault();
+        pendingKeyRef.current = "y";
+        setMessage("yank block");
+        return;
+      }
+
+      if (event.key === "p") {
+        event.preventDefault();
+        pasteCopiedBlock(1);
+        return;
+      }
+
+      if (event.key === "P") {
+        event.preventDefault();
+        pasteCopiedBlock(0);
+        return;
+      }
+
       if (event.key === "x") {
         event.preventDefault();
         deleteSelected();
@@ -1181,12 +1260,14 @@ export default function App() {
     blockPickerOpen,
     chooseBlockType,
     closeEditor,
+    copySelectedBlock,
     deleteSelected,
     mode,
     moveSelected,
     needsDocument,
     openBlockPicker,
     openRecentDocument,
+    pasteCopiedBlock,
     saveDocument,
     selectByIndex,
     selectedBlock,
@@ -1319,18 +1400,6 @@ export default function App() {
 
   return (
     <main className="app-shell" ref={editorRef} tabIndex={-1}>
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">b</span>
-          <span>bvim</span>
-        </div>
-        <div className="document-heading">
-          <strong>{title || fileName}</strong>
-          <span>{fileName}</span>
-        </div>
-        <div className="document-state">{saving ? "saving" : dirty ? "modified" : "saved"}</div>
-      </header>
-
       <section className="workspace">
         <section className="document" aria-label="Document blocks">
           {blocks.length === 0 ? (

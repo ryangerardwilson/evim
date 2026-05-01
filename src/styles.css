@@ -55,7 +55,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 42px 1fr 28px;
+  grid-template-rows: 1fr 28px;
   height: 100%;
   outline: none;
   background: transparent;
@@ -680,7 +680,7 @@ textarea:focus {
 
 @media (max-width: 620px) {
   .app-shell {
-    grid-template-rows: 38px 1fr 26px;
+    grid-template-rows: 1fr 26px;
   }
 
   .topbar {
