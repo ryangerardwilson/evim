@@ -25,6 +25,7 @@ const SHORTCUT_GROUPS = [
       ["?", "toggle shortcuts"],
       ["n", "new block"],
       ["j / k", "select next / previous block"],
+      ["gg / G", "select first / last block"],
       ["J / K", "move selected block down / up"],
       ["i / enter", "edit selected block"],
       ["o / O", "insert text block after / before"],
@@ -81,6 +82,7 @@ const KEYBOARD_LOCK_KEYS = [
   "KeyD",
   "KeyE",
   "KeyF",
+  "KeyG",
   "KeyH",
   "KeyI",
   "KeyK",
@@ -1188,6 +1190,16 @@ export default function App() {
         }
       }
 
+      if (pendingKeyRef.current === "g") {
+        pendingKeyRef.current = "";
+        if (!event.ctrlKey && !event.altKey && !event.metaKey && event.key === "g") {
+          event.preventDefault();
+          selectByIndex(0);
+          setMessage("top");
+          return;
+        }
+      }
+
       if (event.ctrlKey && !event.altKey && !event.metaKey && key === "s") {
         event.preventDefault();
         saveDocument().catch((error) => setMessage(error.message));
@@ -1210,6 +1222,20 @@ export default function App() {
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
         selectByIndex(selectedIndex - 1);
+        return;
+      }
+
+      if (event.key === "g") {
+        event.preventDefault();
+        pendingKeyRef.current = "g";
+        setMessage("go");
+        return;
+      }
+
+      if (event.key === "G") {
+        event.preventDefault();
+        selectByIndex(Number.MAX_SAFE_INTEGER);
+        setMessage("bottom");
         return;
       }
 
