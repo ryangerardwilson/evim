@@ -222,27 +222,128 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
-function openTerminalEditor(fullPath) {
+function commandExists(command) {
+  return new Promise((resolve) => {
+    const child = spawn("sh", ["-lc", `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
+      stdio: "ignore"
+    });
+    child.on("exit", (code) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
+}
+
+async function resolveTerminalCommand({ workdir, title, command }) {
+  const preferred = process.env.BVIM_TERMINAL || process.env.TERMINAL || "";
+  const preferredName = path.basename(preferred);
+
+  if (preferredName && (await commandExists(preferredName))) {
+    if (preferredName.includes("alacritty")) {
+      return {
+        executable: preferredName,
+        args: ["--working-directory", workdir, "--title", title, "-e", "sh", "-lc", command]
+      };
+    }
+    if (preferredName.includes("xdg-terminal-exec")) {
+      return {
+        executable: preferredName,
+        args: ["sh", "-lc", `cd ${shellQuote(workdir)} && ${command}`]
+      };
+    }
+    return {
+      executable: preferredName,
+      args: ["-e", "sh", "-lc", `cd ${shellQuote(workdir)} && ${command}`]
+    };
+  }
+
+  if (await commandExists("alacritty")) {
+    return {
+      executable: "alacritty",
+      args: ["--working-directory", workdir, "--title", title, "-e", "sh", "-lc", command]
+    };
+  }
+
+  if (await commandExists("kitty")) {
+    return {
+      executable: "kitty",
+      args: ["--directory", workdir, "--title", title, "sh", "-lc", command]
+    };
+  }
+
+  if (await commandExists("wezterm")) {
+    return {
+      executable: "wezterm",
+      args: ["start", "--cwd", workdir, "--", "sh", "-lc", command]
+    };
+  }
+
+  if (await commandExists("foot")) {
+    return {
+      executable: "foot",
+      args: ["--working-directory", workdir, "--title", title, "sh", "-lc", command]
+    };
+  }
+
+  if (await commandExists("xterm")) {
+    return {
+      executable: "xterm",
+      args: ["-T", title, "-e", "sh", "-lc", `cd ${shellQuote(workdir)} && ${command}`]
+    };
+  }
+
+  if (await commandExists("xdg-terminal-exec")) {
+    return {
+      executable: "xdg-terminal-exec",
+      args: ["sh", "-lc", `cd ${shellQuote(workdir)} && ${command}`]
+    };
+  }
+
+  throw new Error("no supported terminal found");
+}
+
+function launchTerminal({ executable, args, workdir }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      cwd: workdir,
+      detached: true,
+      stdio: "ignore"
+    });
+
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      callback(value);
+    };
+
+    const timer = setTimeout(() => {
+      child.unref();
+      finish(resolve);
+    }, 500);
+
+    child.once("error", (error) => {
+      finish(reject, error);
+    });
+
+    child.once("exit", (code, signal) => {
+      finish(
+        reject,
+        new Error(`${executable} exited before opening the editor${signal ? ` (${signal})` : ` (${code})`}`)
+      );
+    });
+  });
+}
+
+async function openTerminalEditor(fullPath) {
   const editor = process.env.BVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
   const workdir = path.dirname(fullPath);
   const command = `${editor} ${shellQuote(fullPath)}`;
   const title = `bvim ${path.basename(fullPath)}`;
-
-  const terminal = process.env.BVIM_TERMINAL || "";
-  if (terminal) {
-    spawn(terminal, ["-e", "sh", "-lc", command], {
-      cwd: workdir,
-      detached: true,
-      stdio: "ignore"
-    }).unref();
-    return terminal;
-  }
-
-  spawn("xdg-terminal-exec", ["--dir", workdir, "--title", title, "sh", "-lc", command], {
-    detached: true,
-    stdio: "ignore"
-  }).unref();
-  return "xdg-terminal-exec";
+  const terminal = await resolveTerminalCommand({ workdir, title, command });
+  await launchTerminal({ ...terminal, workdir });
+  return terminal.executable;
 }
 
 const app = express();
@@ -344,7 +445,7 @@ app.post("/api/open-editor", async (req, res) => {
       await fs.writeFile(fullPath, createStarterMarkdown(fullPath), "utf8");
     }
     await rememberRecentDocument(fullPath);
-    const terminal = openTerminalEditor(fullPath);
+    const terminal = await openTerminalEditor(fullPath);
     res.json({ ok: true, file, terminal });
   } catch (error) {
     res.status(400).json({ error: error.message });
