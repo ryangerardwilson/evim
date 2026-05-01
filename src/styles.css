@@ -148,7 +148,11 @@ button {
   min-width: 0;
   overflow: auto;
   padding: 22px clamp(14px, 6vw, 88px) 48px;
-  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.document::-webkit-scrollbar {
+  display: none;
 }
 
 .block {

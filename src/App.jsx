@@ -1583,11 +1583,20 @@ function BlockView({
   onUpdateMeta,
   onImageFile
 }) {
+  const articleRef = useRef(null);
   const fileInputRef = useRef(null);
   const latexHtml = useMemo(() => renderLatex(block.content), [block.content]);
 
+  useEffect(() => {
+    if (!selected) {
+      return;
+    }
+    articleRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selected]);
+
   return (
     <article
+      ref={articleRef}
       className={cx("block", selected && "selected", `block-${block.type}`)}
       onClick={onSelect}
       onDoubleClick={onInsert}
