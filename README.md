@@ -1,8 +1,8 @@
 # bvim
 
-`bvim` is a CLI-launched line document editor for `.bvim` files. It opens a
-small local desktop browser shell, lets you edit text lines with embedded image
-and LaTeX items, and saves back to the file you opened with Vim-style commands.
+`bvim` is a CLI-launched Markdown previewer for local `.md` files. It opens a
+small local desktop browser shell, renders Markdown with images and LaTeX, and
+outsources editing to Vim in a terminal.
 
 ## Install
 
@@ -25,60 +25,61 @@ Make sure `~/.local/bin` is on your `PATH`.
 
 ```bash
 bvim
-bvim notes.bvim
-bvim ~/Documents/notes.bvim
+bvim notes.md
+bvim ~/Documents/notes.md
 bvim -h
 bvim -v
 bvim -u
 ```
 
-Running `bvim` with no file shows recent `.bvim` files and an option to create a
-new document. There is no untitled scratch document.
+Running `bvim` with no file shows recent `.md` files and an option to create a
+named Markdown document. There is no untitled scratch document.
 
-In that flow, the document name is the filename. A path without a `.bvim`
-suffix is treated as a directory, so `hello.bvim` plus `~/Documents/bvim`
-creates `~/Documents/bvim/hello.bvim`.
+In that flow, the document name is the filename. A path without a `.md` suffix
+is treated as a directory, so `hello.md` plus `~/Documents/bvim` creates
+`~/Documents/bvim/hello.md`.
 
 Each `bvim <file>` command starts its own local server on the first available
-port at or above `8000`, so multiple `.bvim` files can be open at the same time.
+port at or above `8000`, so multiple Markdown files can be open at the same
+time.
 
-## Editing
+## Preview
 
-- `n` opens the insert picker.
+- `j` and `k` smooth-scroll the Markdown preview.
+- `gg` and `G` scroll to the top and bottom.
+- `i` or `Enter` opens the current file in Vim in a terminal.
+- `r` reloads the Markdown from disk.
 - `?` toggles the shortcut overlay.
-- Text lines, image embeds, and LaTeX embeds are available from the picker.
-- `j` and `k` move the active item in normal mode.
-- `gg` and `G` jump to the first and last item.
-- `J` and `K` move the selected item down and up.
-- `i` or `Enter` edits the selected item.
-- `Enter` inside a text line splits it into a new line.
-- `yy` copies the selected item.
-- `p` and `P` paste the copied item after or before the current item.
-- `Esc` or `Ctrl+[` returns to normal mode.
+- `Esc` or `Ctrl+[` closes overlays or command mode.
 - `:` opens the command line.
 - `Ctrl+C` exits bvim entirely.
-- `:w` saves the current file.
-- `:w <name>` saves as another `.bvim` file in the current document directory.
-- `:e <name>` opens another `.bvim` file in the current document directory.
-- `:q` closes only when clean.
-- `:q!` closes without saving.
-- `:wq` saves and closes.
+- `:edit` opens the current file in Vim.
+- `:e <name>` opens another `.md` file in the current document directory.
+- `:r` or `:w` reloads from disk.
+- `:q`, `:q!`, or `:wq` closes bvim.
 - `:lock` asks the browser shell for keyboard lock.
 
-While typing in text fields, `Ctrl+M` acts as enter, `Ctrl+I` acts as tab, and
-basic Emacs-style bindings such as `Alt+F`, `Alt+B`, `Ctrl+H`, `Ctrl+W`,
-`Ctrl+A`, and `Ctrl+E` are handled by the editor.
+Markdown image references such as `![caption](./image.png)` are resolved
+relative to the Markdown file. Block LaTeX is rendered from `$$ ... $$`, and
+inline LaTeX is rendered from `$...$`.
+
+While typing in setup or command fields, `Ctrl+M` acts as enter, `Ctrl+I` acts
+as tab, and basic Emacs-style bindings such as `Alt+F`, `Alt+B`, `Ctrl+H`,
+`Ctrl+W`, `Ctrl+A`, and `Ctrl+E` are handled by the editor.
 
 ## Files
 
-Documents are JSON files with a `.bvim` suffix. The file still stores an ordered
-`blocks` array for compatibility, but text entries are treated as document
-lines. Image embeds store uploaded images as data URLs inside the document,
-which keeps files portable but can make large image-heavy documents grow
-quickly.
+Documents are plain Markdown files with a `.md` suffix. There is no JSON
+document format.
 
 When launched from the CLI, the server restricts reads and writes to the opened
 document directory and the app's internal `documents/` directory.
+
+To choose a terminal or editor explicitly:
+
+```bash
+BVIM_TERMINAL=alacritty BVIM_EDITOR=nvim bvim notes.md
+```
 
 ## Development
 
@@ -97,7 +98,7 @@ The plain web server opens the same name and path flow when no file is supplied.
 The CLI is the normal path for opening a specific document:
 
 ```bash
-npm run cli -- notes.bvim
+npm run cli -- notes.md
 ```
 
 Run the desktop shell directly when debugging Electron behavior:

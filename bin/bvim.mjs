@@ -28,14 +28,14 @@ flags:
     upgrade through the installer
 
 features:
-  choose a recent document or create a new one
+  choose a recent Markdown document or create a new one
   # bvim
   bvim
 
-  open or create a line document in the desktop editor
-  # bvim <file.bvim>
-  bvim notes.bvim
-  bvim ~/Documents/notes.bvim
+  open or create a Markdown document preview
+  # bvim <file.md>
+  bvim notes.md
+  bvim ~/Documents/notes.md
 
   run the development web server
   # npm run dev
@@ -49,17 +49,14 @@ function normalizeDocumentPath(value) {
   }
   const expanded = raw.startsWith("~/") ? path.join(process.env.HOME || "", raw.slice(2)) : raw;
   const absolute = path.resolve(process.cwd(), expanded);
-  if (absolute.endsWith(".bvim") || absolute.endsWith(".bvim.json")) {
+  if (absolute.endsWith(".md")) {
     return absolute;
   }
-  if (absolute.endsWith(".json")) {
-    return absolute.replace(/\.json$/, ".bvim");
-  }
-  return `${absolute}.bvim`;
+  return `${absolute}.md`;
 }
 
 function stripDocumentExtension(value) {
-  return value.replace(/\.bvim\.json$/i, "").replace(/\.bvim$/i, "");
+  return value.replace(/\.md$/i, "");
 }
 
 function titleFromPath(filePath) {
@@ -110,6 +107,9 @@ async function listRecentDocuments() {
 
   for (const entry of sorted) {
     const absolute = path.resolve(entry.path);
+    if (!absolute.endsWith(".md")) {
+      continue;
+    }
     try {
       const stats = await fs.stat(absolute);
       if (stats.isFile()) {
@@ -316,21 +316,8 @@ async function selectLaunchAction(documents) {
 }
 
 function starterDocument(filePath, title) {
-  return {
-    app: "bvim",
-    version: 1,
-    file: path.basename(filePath),
-    title: title || titleFromPath(filePath),
-    savedAt: new Date().toISOString(),
-    blocks: [
-      {
-        id: `block-${Date.now()}-text`,
-        type: "text",
-        content: "",
-        meta: {}
-      }
-    ]
-  };
+  const heading = title || titleFromPath(filePath);
+  return `# ${heading}\n\n`;
 }
 
 async function createDocumentIfMissing(filePath, title) {
@@ -339,7 +326,7 @@ async function createDocumentIfMissing(filePath, title) {
     return false;
   } catch {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, `${JSON.stringify(starterDocument(filePath, title), null, 2)}\n`, "utf8");
+    await fs.writeFile(filePath, starterDocument(filePath, title), "utf8");
     return true;
   }
 }
@@ -436,7 +423,7 @@ async function main(argv) {
   }
 
   if (argv.length > 1) {
-    throw new Error("expected one .bvim file path");
+    throw new Error("expected one .md file path");
   }
 
   let filePath;

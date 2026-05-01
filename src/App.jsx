@@ -1,10 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import katex from "katex";
-import {
-  FileImage,
-  Sigma,
-  Type
-} from "lucide-react";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
 
 function initialFileName() {
@@ -13,25 +8,15 @@ function initialFileName() {
 }
 
 const START_FILE = initialFileName();
-const BLOCK_TYPES = [
-  { type: "text", label: "Text line", Icon: Type },
-  { type: "image", label: "Image embed", Icon: FileImage },
-  { type: "latex", label: "LaTeX embed", Icon: Sigma }
-];
 const SHORTCUT_GROUPS = [
   {
     title: "normal",
     items: [
       ["?", "toggle shortcuts"],
-      ["n", "new line or embed"],
-      ["j / k", "select next / previous item"],
-      ["gg / G", "select first / last item"],
-      ["J / K", "move selected item down / up"],
-      ["i / enter", "edit selected item"],
-      ["o / O", "insert text line after / before"],
-      ["yy", "copy selected item"],
-      ["p / P", "paste item after / before"],
-      ["x", "delete selected item"],
+      ["j / k", "smooth scroll down / up"],
+      ["gg / G", "scroll top / bottom"],
+      ["i / enter", "open file in vim"],
+      ["r", "reload markdown"],
       [":", "command line"],
       ["ctrl+c", "quit bvim"]
     ]
@@ -39,12 +24,13 @@ const SHORTCUT_GROUPS = [
   {
     title: "commands",
     items: [
-      [":w", "save"],
-      [":w path", "save as path"],
-      [":e path", "open path"],
-      [":q", "quit if clean"],
-      [":q!", "quit without saving"],
-      [":wq", "save and quit"],
+      [":e path", "open markdown path"],
+      [":edit", "open current file in vim"],
+      [":r", "reload current file"],
+      [":q", "quit"],
+      [":q!", "quit"],
+      [":w", "reload from disk"],
+      [":wq", "quit"],
       [":lock", "request keyboard lock"]
     ]
   },
@@ -60,15 +46,6 @@ const SHORTCUT_GROUPS = [
       ["ctrl+w / alt+d", "kill word back / forward"],
       ["ctrl+k / ctrl+u", "kill line right / left"],
       ["ctrl+y", "yank killed text"]
-    ]
-  },
-  {
-    title: "insert picker",
-    items: [
-      ["j / k", "move choice"],
-      ["1 / 2 / 3", "choose item type"],
-      ["enter", "insert selected type"],
-      ["esc", "cancel"]
     ]
   }
 ];
@@ -87,83 +64,21 @@ const KEYBOARD_LOCK_KEYS = [
   "KeyI",
   "KeyK",
   "KeyM",
-  "KeyN",
-  "KeyP",
+  "KeyR",
   "KeyU",
   "KeyW",
-  "KeyY",
   "Tab"
 ];
 let killRing = "";
-
-function makeBlockId() {
-  return `block-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function makeBlock(type) {
-  const id = makeBlockId();
-  if (type === "latex") {
-    return { id, type, content: "E = mc^2", meta: {} };
-  }
-  if (type === "image") {
-    return { id, type, content: "", meta: { name: "", caption: "" } };
-  }
-  return { id, type: "text", content: "", meta: {} };
-}
-
-function makeTextLine(content = "") {
-  return { id: makeBlockId(), type: "text", content, meta: {} };
-}
-
-function cloneBlock(block) {
-  return {
-    ...block,
-    id: makeBlockId(),
-    meta: { ...(block.meta || {}) }
-  };
-}
-
-function normalizeDocumentItems(items) {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-
-  return items.flatMap((item) => {
-    if (!item || typeof item !== "object") {
-      return [];
-    }
-    if (item.type !== "text") {
-      return [{ ...item, meta: { ...(item.meta || {}) } }];
-    }
-
-    const lines = String(item.content || "").split("\n");
-    return lines.map((line, index) => ({
-      ...item,
-      id: index === 0 ? item.id || makeBlockId() : makeBlockId(),
-      content: line,
-      meta: { ...(item.meta || {}) }
-    }));
-  });
-}
-
-function itemLabel(item) {
-  if (!item) {
-    return "item";
-  }
-  if (item.type === "text") {
-    return "line";
-  }
-  return `${item.type} embed`;
-}
 
 function cx(...parts) {
   return parts.filter(Boolean).join(" ");
 }
 
-function renderLatex(source) {
+function renderLatex(source, displayMode = true) {
   try {
     return katex.renderToString(source || "", {
-      displayMode: true,
+      displayMode,
       throwOnError: false,
       strict: false
     });
@@ -335,7 +250,7 @@ function handleTextControlKeyDown(event, { setValue, multiline = false, onEnter,
     if (multiline) {
       replaceRange(start, end, "\n");
     } else if (onEnter) {
-      onEnter(value, { start, end, target });
+      onEnter(value);
     }
     return true;
   }
@@ -458,19 +373,267 @@ function handleTextControlKeyDown(event, { setValue, multiline = false, onEnter,
   return false;
 }
 
+function starterMarkdown(title) {
+  return `# ${title || "document"}\n\n`;
+}
+
+function isMarkdownBoundary(line) {
+  return (
+    !line.trim() ||
+    /^#{1,6}\s+/.test(line) ||
+    /^```/.test(line) ||
+    /^\$\$/.test(line.trim()) ||
+    /^!\[[^\]]*]\([^)]+\)\s*$/.test(line.trim()) ||
+    /^>\s?/.test(line) ||
+    /^[-*_]{3,}\s*$/.test(line.trim()) ||
+    /^(\s*)([-*+]|\d+\.)\s+/.test(line)
+  );
+}
+
+function parseMarkdown(markdown) {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const nodes = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (/^```/.test(trimmed)) {
+      const language = trimmed.replace(/^```/, "").trim();
+      const codeLines = [];
+      index += 1;
+      while (index < lines.length && !/^```/.test(lines[index].trim())) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) {
+        index += 1;
+      }
+      nodes.push({ type: "code", language, value: codeLines.join("\n") });
+      continue;
+    }
+
+    if (/^\$\$/.test(trimmed)) {
+      const latexLines = [];
+      const first = trimmed.replace(/^\$\$/, "");
+      if (first.endsWith("$$") && first.length > 2) {
+        latexLines.push(first.replace(/\$\$$/, ""));
+        index += 1;
+      } else {
+        if (first) {
+          latexLines.push(first);
+        }
+        index += 1;
+        while (index < lines.length && !/\$\$\s*$/.test(lines[index])) {
+          latexLines.push(lines[index]);
+          index += 1;
+        }
+        if (index < lines.length) {
+          latexLines.push(lines[index].replace(/\$\$\s*$/, ""));
+          index += 1;
+        }
+      }
+      nodes.push({ type: "latex", value: latexLines.join("\n").trim() });
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      nodes.push({ type: "heading", level: heading[1].length, value: heading[2] });
+      index += 1;
+      continue;
+    }
+
+    const image = trimmed.match(/^!\[([^\]]*)]\(([^)\s]+)(?:\s+"([^"]+)")?\)\s*$/);
+    if (image) {
+      nodes.push({ type: "image", alt: image[1], src: image[2], title: image[3] || "" });
+      index += 1;
+      continue;
+    }
+
+    if (/^[-*_]{3,}\s*$/.test(trimmed)) {
+      nodes.push({ type: "rule" });
+      index += 1;
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quoteLines = [];
+      while (index < lines.length && /^>\s?/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^>\s?/, ""));
+        index += 1;
+      }
+      nodes.push({ type: "quote", value: quoteLines.join(" ") });
+      continue;
+    }
+
+    if (/^(\s*)([-*+]|\d+\.)\s+/.test(line)) {
+      const items = [];
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      while (index < lines.length && /^(\s*)([-*+]|\d+\.)\s+/.test(lines[index])) {
+        items.push(lines[index].replace(/^(\s*)([-*+]|\d+\.)\s+/, ""));
+        index += 1;
+      }
+      nodes.push({ type: "list", ordered, items });
+      continue;
+    }
+
+    const paragraphLines = [line];
+    index += 1;
+    while (index < lines.length && !isMarkdownBoundary(lines[index])) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    nodes.push({ type: "paragraph", value: paragraphLines.join(" ") });
+  }
+
+  return nodes;
+}
+
+function inlineParts(value) {
+  const parts = [];
+  const source = String(value || "");
+  const pattern = /(`[^`]+`|\$[^$\n]+\$)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pattern.exec(source))) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", value: source.slice(lastIndex, match.index) });
+    }
+    const token = match[0];
+    if (token.startsWith("`")) {
+      parts.push({ type: "code", value: token.slice(1, -1) });
+    } else {
+      parts.push({ type: "math", value: token.slice(1, -1) });
+    }
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < source.length) {
+    parts.push({ type: "text", value: source.slice(lastIndex) });
+  }
+  return parts;
+}
+
+function MarkdownInline({ value }) {
+  return inlineParts(value).map((part, index) => {
+    if (part.type === "code") {
+      return <code key={index}>{part.value}</code>;
+    }
+    if (part.type === "math") {
+      return (
+        <span
+          key={index}
+          className="inline-latex"
+          dangerouslySetInnerHTML={{ __html: renderLatex(part.value, false) }}
+        />
+      );
+    }
+    return <React.Fragment key={index}>{part.value}</React.Fragment>;
+  });
+}
+
+function markdownImageSource(fileName, src) {
+  if (/^(https?:|data:|blob:)/i.test(src)) {
+    return src;
+  }
+  return `/api/asset?file=${encodeURIComponent(fileName)}&path=${encodeURIComponent(src)}`;
+}
+
+function MarkdownDocument({ markdown, fileName }) {
+  const nodes = useMemo(() => parseMarkdown(markdown), [markdown]);
+
+  if (!nodes.length) {
+    return <div className="empty-state">empty markdown</div>;
+  }
+
+  return (
+    <article className="markdown-doc">
+      {nodes.map((node, index) => {
+        if (node.type === "heading") {
+          const Tag = `h${node.level}`;
+          return (
+            <Tag key={index}>
+              <MarkdownInline value={node.value} />
+            </Tag>
+          );
+        }
+        if (node.type === "paragraph") {
+          return (
+            <p key={index}>
+              <MarkdownInline value={node.value} />
+            </p>
+          );
+        }
+        if (node.type === "list") {
+          const ListTag = node.ordered ? "ol" : "ul";
+          return (
+            <ListTag key={index}>
+              {node.items.map((item, itemIndex) => (
+                <li key={itemIndex}>
+                  <MarkdownInline value={item} />
+                </li>
+              ))}
+            </ListTag>
+          );
+        }
+        if (node.type === "quote") {
+          return (
+            <blockquote key={index}>
+              <MarkdownInline value={node.value} />
+            </blockquote>
+          );
+        }
+        if (node.type === "code") {
+          return (
+            <pre key={index} data-language={node.language || undefined}>
+              <code>{node.value}</code>
+            </pre>
+          );
+        }
+        if (node.type === "latex") {
+          return (
+            <div
+              key={index}
+              className="latex-render"
+              dangerouslySetInnerHTML={{ __html: renderLatex(node.value, true) }}
+            />
+          );
+        }
+        if (node.type === "image") {
+          return (
+            <figure key={index}>
+              <img src={markdownImageSource(fileName, node.src)} alt={node.alt || node.title || ""} />
+              {(node.title || node.alt) && <figcaption>{node.title || node.alt}</figcaption>}
+            </figure>
+          );
+        }
+        if (node.type === "rule") {
+          return <hr key={index} />;
+        }
+        return null;
+      })}
+    </article>
+  );
+}
+
 export default function App() {
   const [fileName, setFileName] = useState(START_FILE);
   const [title, setTitle] = useState("");
-  const [blocks, setBlocks] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [markdown, setMarkdown] = useState("");
+  const [mtimeMs, setMtimeMs] = useState(null);
   const [mode, setMode] = useState("normal");
   const [command, setCommand] = useState("");
   const [message, setMessage] = useState("ready");
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closed, setClosed] = useState(false);
-  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
-  const [blockPickerIndex, setBlockPickerIndex] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
   const [creatingDocument, setCreatingDocument] = useState(false);
@@ -480,26 +643,16 @@ export default function App() {
   const [setupPath, setSetupPath] = useState("");
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
-  const [copiedBlock, setCopiedBlock] = useState(null);
-  const [focusRequest, setFocusRequest] = useState(null);
   const [scrollProgress, setScrollProgress] = useState(1);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
   const documentRef = useRef(null);
   const editorRef = useRef(null);
-  const pickerRef = useRef(null);
   const setupTitleRef = useRef(null);
   const setupPathRef = useRef(null);
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
   const pendingKeyRef = useRef("");
-
-  const selectedIndex = useMemo(
-    () => blocks.findIndex((block) => block.id === selectedId),
-    [blocks, selectedId]
-  );
-
-  const selectedBlock = selectedIndex >= 0 ? blocks[selectedIndex] : null;
 
   const updateScrollProgress = useCallback(() => {
     const node = documentRef.current;
@@ -513,40 +666,33 @@ export default function App() {
     setScrollProgress(Math.max(0, Math.min(1, nextProgress)));
   }, []);
 
-  const markDirty = useCallback(() => {
-    setDirty(true);
-    setClosed(false);
-  }, []);
-
-  const selectByIndex = useCallback(
-    (index) => {
-      if (!blocks.length) {
-        setSelectedId(null);
-        return;
-      }
-      const nextIndex = Math.max(0, Math.min(blocks.length - 1, index));
-      setSelectedId(blocks[nextIndex].id);
-    },
-    [blocks]
-  );
-
-  const loadDocument = useCallback(async (nextFile = START_FILE) => {
+  const loadDocument = useCallback(async (nextFile = START_FILE, { silent = false } = {}) => {
     const response = await fetch(`/api/document?file=${encodeURIComponent(nextFile)}`);
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || "Unable to open document");
+      throw new Error(payload.error || "Unable to open markdown");
     }
     const document = await response.json();
-    const nextBlocks = normalizeDocumentItems(document.blocks);
     setFileName(document.file || nextFile || START_FILE);
     setTitle(document.title || nextFile || "document");
-    setBlocks(nextBlocks);
-    setSelectedId(nextBlocks[0]?.id || null);
-    setDirty(false);
+    setMarkdown(document.markdown || "");
+    setMtimeMs(document.mtimeMs ?? null);
     setClosed(false);
     setNeedsDocument(false);
-    setMessage(`${document.file || nextFile} opened`);
+    if (!silent) {
+      setMessage(`${document.file || nextFile} loaded`);
+    }
   }, []);
+
+  const reloadDocument = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!fileName) {
+        return;
+      }
+      await loadDocument(fileName, { silent });
+    },
+    [fileName, loadDocument]
+  );
 
   const loadRecentDocuments = useCallback(async () => {
     try {
@@ -578,36 +724,38 @@ export default function App() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(updateScrollProgress);
     return () => window.cancelAnimationFrame(frame);
-  }, [blocks, mode, selectedId, updateScrollProgress]);
+  }, [markdown, updateScrollProgress]);
 
   useEffect(() => {
     window.addEventListener("resize", updateScrollProgress);
     return () => window.removeEventListener("resize", updateScrollProgress);
   }, [updateScrollProgress]);
 
-  const saveDocument = useCallback(
-    async (targetFile = fileName) => {
-      setSaving(true);
+  useEffect(() => {
+    if (needsDocument || !fileName) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(async () => {
       try {
-        const response = await fetch("/api/document", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: targetFile, title, blocks })
-        });
-        const payload = await response.json().catch(() => ({}));
+        const response = await fetch(`/api/document?file=${encodeURIComponent(fileName)}`);
         if (!response.ok) {
-          throw new Error(payload.error || "Save failed");
+          return;
         }
-        setFileName(payload.file || targetFile);
-        setDirty(false);
-        setMessage(`${payload.file || targetFile} saved`);
-        return payload;
-      } finally {
-        setSaving(false);
+        const document = await response.json();
+        if (document.exists && document.mtimeMs !== mtimeMs) {
+          setTitle(document.title || fileName);
+          setMarkdown(document.markdown || "");
+          setMtimeMs(document.mtimeMs ?? null);
+          setMessage("updated from disk");
+        }
+      } catch {
+        // External edit polling should stay quiet.
       }
-    },
-    [blocks, fileName, title]
-  );
+    }, 1500);
+
+    return () => window.clearInterval(interval);
+  }, [fileName, mtimeMs, needsDocument]);
 
   const createNamedDocument = useCallback(async () => {
     const nextTitle = setupTitle.trim();
@@ -627,35 +775,22 @@ export default function App() {
       }
 
       if (existing.exists) {
-        const nextBlocks = normalizeDocumentItems(existing.blocks);
-        setFileName(existing.file || targetFile);
-        setTitle(existing.title || nextTitle);
-        setBlocks(nextBlocks);
-        setSelectedId(nextBlocks[0]?.id || null);
-        setDirty(false);
-        setNeedsDocument(false);
+        await loadDocument(targetFile);
         setCreatingDocument(false);
         setPathCompletions([]);
-        setMessage(`${existing.file || targetFile} opened`);
         return;
       }
 
-      const starterBlocks = [makeTextLine()];
       const saveResponse = await fetch("/api/document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: targetFile, title: nextTitle, blocks: starterBlocks })
+        body: JSON.stringify({ file: targetFile, markdown: starterMarkdown(nextTitle) })
       });
       const saved = await saveResponse.json().catch(() => ({}));
       if (!saveResponse.ok) {
         throw new Error(saved.error || "Save failed");
       }
-      setFileName(saved.file || targetFile);
-      setTitle(nextTitle);
-      setBlocks(starterBlocks);
-      setSelectedId(starterBlocks[0].id);
-      setDirty(false);
-      setNeedsDocument(false);
+      await loadDocument(targetFile);
       setCreatingDocument(false);
       setPathCompletions([]);
       setMode("normal");
@@ -665,7 +800,7 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }, [setupPath, setupTitle]);
+  }, [loadDocument, setupPath, setupTitle]);
 
   const openRecentDocument = useCallback(
     async (document) => {
@@ -797,41 +932,6 @@ export default function App() {
     window.setTimeout(() => window.close(), 0);
   }, []);
 
-  const addBlock = useCallback(
-    (type, offset = 1) => {
-      const block = type === "text" ? makeTextLine() : makeBlock(type);
-      setBlocks((current) => {
-        if (!current.length || selectedIndex < 0) {
-          return [block];
-        }
-        const next = [...current];
-        next.splice(selectedIndex + offset, 0, block);
-        return next;
-      });
-      setSelectedId(block.id);
-      setMode("insert");
-      if (block.type === "text") {
-        setFocusRequest({ id: block.id, position: 0, token: Date.now() });
-      }
-      setBlockPickerOpen(false);
-      markDirty();
-    },
-    [markDirty, selectedIndex]
-  );
-
-  const openBlockPicker = useCallback(() => {
-    setBlockPickerIndex(0);
-    setBlockPickerOpen(true);
-    setMode("normal");
-  }, []);
-
-  const chooseBlockType = useCallback(
-    (type) => {
-      addBlock(type, 1);
-    },
-    [addBlock]
-  );
-
   const requestKeyboardLock = useCallback(async () => {
     if (!navigator.keyboard?.lock) {
       setKeyboardLockState("unsupported");
@@ -853,164 +953,42 @@ export default function App() {
     }
   }, []);
 
-  const updateBlock = useCallback(
-    (id, patch) => {
-      setBlocks((current) =>
-        current.map((block) => (block.id === id ? { ...block, ...patch } : block))
-      );
-      markDirty();
-    },
-    [markDirty]
-  );
-
-  const updateBlockMeta = useCallback(
-    (id, patch) => {
-      setBlocks((current) =>
-        current.map((block) =>
-          block.id === id ? { ...block, meta: { ...block.meta, ...patch } } : block
-        )
-      );
-      markDirty();
-    },
-    [markDirty]
-  );
-
-  const splitTextLine = useCallback(
-    (id, value, start, end = start) => {
-      const before = value.slice(0, start);
-      const after = value.slice(end);
-      const nextLine = makeTextLine(after);
-
-      setBlocks((current) => {
-        const index = current.findIndex((block) => block.id === id);
-        if (index < 0) {
-          return current;
-        }
-        const next = [...current];
-        next[index] = { ...next[index], content: before };
-        next.splice(index + 1, 0, nextLine);
-        return next;
-      });
-      setSelectedId(nextLine.id);
-      setMode("insert");
-      setFocusRequest({ id: nextLine.id, position: 0, token: Date.now() });
-      markDirty();
-    },
-    [markDirty]
-  );
-
-  const updateTextLineContent = useCallback(
-    (id, value) => {
-      const lines = String(value).split("\n");
-      if (lines.length === 1) {
-        updateBlock(id, { content: value });
-        return;
-      }
-
-      const lineBlocks = lines.map((line) => makeTextLine(line));
-      setBlocks((current) => {
-        const index = current.findIndex((block) => block.id === id);
-        if (index < 0) {
-          return current;
-        }
-
-        const firstLine = { ...current[index], content: lineBlocks[0].content };
-        const next = [...current];
-        next.splice(index, 1, firstLine, ...lineBlocks.slice(1));
-        return next;
-      });
-
-      const lastLine = lineBlocks[lineBlocks.length - 1];
-      setSelectedId(lastLine.id);
-      setMode("insert");
-      setFocusRequest({ id: lastLine.id, position: lastLine.content.length, token: Date.now() });
-      markDirty();
-    },
-    [markDirty, updateBlock]
-  );
-
-  const deleteSelected = useCallback(() => {
-    if (!selectedBlock) {
+  const openExternalEditor = useCallback(async () => {
+    if (!fileName) {
       return;
     }
-    const nextBlocks = blocks.filter((block) => block.id !== selectedBlock.id);
-    const fallbackIndex = Math.max(0, Math.min(selectedIndex, nextBlocks.length - 1));
-    setBlocks(nextBlocks);
-    setSelectedId(nextBlocks[fallbackIndex]?.id || null);
-    setMode("normal");
-    markDirty();
-  }, [blocks, markDirty, selectedBlock, selectedIndex]);
+    try {
+      const response = await fetch("/api/open-editor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file: fileName })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to open vim");
+      }
+      setMessage(`opened in ${payload.terminal || "terminal"}`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }, [fileName]);
 
-  const copySelectedBlock = useCallback(() => {
-    if (!selectedBlock) {
-      setMessage("no item selected");
+  const scrollDocumentBy = useCallback((direction) => {
+    const node = documentRef.current;
+    if (!node) {
       return;
     }
-    setCopiedBlock(cloneBlock(selectedBlock));
-    setMessage(`copied ${itemLabel(selectedBlock)}`);
-  }, [selectedBlock]);
+    const distance = Math.max(96, node.clientHeight * 0.32);
+    node.scrollBy({ top: direction * distance, behavior: "smooth" });
+  }, []);
 
-  const pasteCopiedBlock = useCallback(
-    (offset = 1) => {
-      if (!copiedBlock) {
-        setMessage("nothing to paste");
-        return;
-      }
-
-      const block = cloneBlock(copiedBlock);
-      setBlocks((current) => {
-        const next = [...current];
-        const insertIndex =
-          selectedIndex >= 0
-            ? Math.max(0, Math.min(current.length, selectedIndex + offset))
-            : current.length;
-        next.splice(insertIndex, 0, block);
-        return next;
-      });
-      setSelectedId(block.id);
-      setMode("normal");
-      setMessage(`pasted ${itemLabel(block)}`);
-      markDirty();
-    },
-    [copiedBlock, markDirty, selectedIndex]
-  );
-
-  const moveSelected = useCallback(
-    (direction) => {
-      if (selectedIndex < 0) {
-        return;
-      }
-      const nextIndex = selectedIndex + direction;
-      if (nextIndex < 0 || nextIndex >= blocks.length) {
-        return;
-      }
-      setBlocks((current) => {
-        const next = [...current];
-        const [item] = next.splice(selectedIndex, 1);
-        next.splice(nextIndex, 0, item);
-        return next;
-      });
-      markDirty();
-    },
-    [blocks.length, markDirty, selectedIndex]
-  );
-
-  const handleImageFile = useCallback(
-    (block, file) => {
-      if (!file) {
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        updateBlock(block.id, {
-          content: String(reader.result || ""),
-          meta: { ...block.meta, name: file.name }
-        });
-      };
-      reader.readAsDataURL(file);
-    },
-    [updateBlock]
-  );
+  const scrollDocumentTo = useCallback((position) => {
+    const node = documentRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTo({ top: position, behavior: "smooth" });
+  }, []);
 
   const runCommand = useCallback(
     async (rawCommand) => {
@@ -1021,37 +999,21 @@ export default function App() {
       }
 
       try {
-        if (value === "w") {
-          await saveDocument();
+        if (value === "w" || value === "r" || value === "reload") {
+          await reloadDocument();
           setMode("normal");
+          setMessage(`${fileName} reloaded`);
           return;
         }
 
-        if (value.startsWith("w ")) {
-          const [, ...nameParts] = value.split(/\s+/);
-          await saveDocument(nameParts.join(" "));
+        if (value === "wq" || value === "x" || value === "q" || value === "q!") {
+          closeEditor();
+          return;
+        }
+
+        if (value === "edit" || value === "i") {
+          await openExternalEditor();
           setMode("normal");
-          return;
-        }
-
-        if (value === "wq" || value === "x") {
-          await saveDocument();
-          closeEditor();
-          return;
-        }
-
-        if (value === "q") {
-          if (dirty) {
-            setMessage("no write since last change");
-            setMode("normal");
-            return;
-          }
-          closeEditor();
-          return;
-        }
-
-        if (value === "q!") {
-          closeEditor();
           return;
         }
 
@@ -1075,7 +1037,7 @@ export default function App() {
         setMode("normal");
       }
     },
-    [closeEditor, dirty, loadDocument, requestKeyboardLock, saveDocument]
+    [closeEditor, fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock]
   );
 
   useEffect(() => {
@@ -1087,12 +1049,6 @@ export default function App() {
       editorRef.current?.focus();
     }
   }, [mode]);
-
-  useEffect(() => {
-    if (blockPickerOpen) {
-      pickerRef.current?.focus();
-    }
-  }, [blockPickerOpen]);
 
   useEffect(() => {
     if (shortcutsOpen) {
@@ -1150,21 +1106,11 @@ export default function App() {
       }
     };
 
-    const protectDirtyClose = (event) => {
-      if (!dirty || forceQuitRef.current) {
-        return;
-      }
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
     window.addEventListener("keydown", suppressCloseTabShortcut, { capture: true });
-    window.addEventListener("beforeunload", protectDirtyClose);
     return () => {
       window.removeEventListener("keydown", suppressCloseTabShortcut, { capture: true });
-      window.removeEventListener("beforeunload", protectDirtyClose);
     };
-  }, [dirty]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1225,72 +1171,15 @@ export default function App() {
         return;
       }
 
-      if (mode === "command") {
+      if (mode === "command" || typingTarget) {
         return;
-      }
-
-      if (mode === "insert") {
-        if (isEscapeKey(event)) {
-          event.preventDefault();
-          setFocusRequest(null);
-          setMode("normal");
-          editorRef.current?.focus();
-        }
-        return;
-      }
-
-      if (blockPickerOpen) {
-        if (isEscapeKey(event)) {
-          event.preventDefault();
-          setBlockPickerOpen(false);
-          editorRef.current?.focus();
-          return;
-        }
-
-        if (event.key === "j" || event.key === "ArrowDown") {
-          event.preventDefault();
-          setBlockPickerIndex((index) => Math.min(BLOCK_TYPES.length - 1, index + 1));
-          return;
-        }
-
-        if (event.key === "k" || event.key === "ArrowUp") {
-          event.preventDefault();
-          setBlockPickerIndex((index) => Math.max(0, index - 1));
-          return;
-        }
-
-        if (isEnterKey(event)) {
-          event.preventDefault();
-          chooseBlockType(BLOCK_TYPES[blockPickerIndex].type);
-          return;
-        }
-
-        const numericChoice = Number(event.key);
-        if (numericChoice >= 1 && numericChoice <= BLOCK_TYPES.length) {
-          event.preventDefault();
-          chooseBlockType(BLOCK_TYPES[numericChoice - 1].type);
-        }
-        return;
-      }
-
-      if (typingTarget) {
-        return;
-      }
-
-      if (pendingKeyRef.current === "y") {
-        pendingKeyRef.current = "";
-        if (!event.ctrlKey && !event.altKey && !event.metaKey && event.key === "y") {
-          event.preventDefault();
-          copySelectedBlock();
-          return;
-        }
       }
 
       if (pendingKeyRef.current === "g") {
         pendingKeyRef.current = "";
         if (!event.ctrlKey && !event.altKey && !event.metaKey && event.key === "g") {
           event.preventDefault();
-          selectByIndex(0);
+          scrollDocumentTo(0);
           setMessage("top");
           return;
         }
@@ -1298,7 +1187,7 @@ export default function App() {
 
       if (event.ctrlKey && !event.altKey && !event.metaKey && key === "s") {
         event.preventDefault();
-        saveDocument().catch((error) => setMessage(error.message));
+        reloadDocument().catch((error) => setMessage(error.message));
         return;
       }
 
@@ -1311,13 +1200,13 @@ export default function App() {
 
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault();
-        selectByIndex(selectedIndex + 1);
+        scrollDocumentBy(1);
         return;
       }
 
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
-        selectByIndex(selectedIndex - 1);
+        scrollDocumentBy(-1);
         return;
       }
 
@@ -1330,101 +1219,39 @@ export default function App() {
 
       if (event.key === "G") {
         event.preventDefault();
-        selectByIndex(Number.MAX_SAFE_INTEGER);
+        const node = documentRef.current;
+        scrollDocumentTo(node ? node.scrollHeight : 0);
         setMessage("bottom");
-        return;
-      }
-
-      if (event.key === "J") {
-        event.preventDefault();
-        moveSelected(1);
-        return;
-      }
-
-      if (event.key === "K") {
-        event.preventDefault();
-        moveSelected(-1);
         return;
       }
 
       if (event.key === "i" || isEnterKey(event)) {
         event.preventDefault();
-        if (selectedBlock) {
-          setFocusRequest(null);
-          setMode("insert");
-        }
+        openExternalEditor();
         return;
       }
 
-      if (event.key === "n") {
+      if (event.key === "r") {
         event.preventDefault();
-        openBlockPicker();
-        return;
-      }
-
-      if (event.key === "o") {
-        event.preventDefault();
-        addBlock("text", 1);
-        return;
-      }
-
-      if (event.key === "O") {
-        event.preventDefault();
-        addBlock("text", 0);
-        return;
-      }
-
-      if (event.key === "y") {
-        event.preventDefault();
-        pendingKeyRef.current = "y";
-        setMessage("yank item");
-        return;
-      }
-
-      if (event.key === "p") {
-        event.preventDefault();
-        pasteCopiedBlock(1);
-        return;
-      }
-
-      if (event.key === "P") {
-        event.preventDefault();
-        pasteCopiedBlock(0);
-        return;
-      }
-
-      if (event.key === "x") {
-        event.preventDefault();
-        deleteSelected();
+        reloadDocument().catch((error) => setMessage(error.message));
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    addBlock,
-    blockPickerIndex,
-    blockPickerOpen,
-    chooseBlockType,
     closeEditor,
-    copySelectedBlock,
-    deleteSelected,
-    mode,
-    moveSelected,
-    needsDocument,
-    openBlockPicker,
-    openRecentDocument,
-    pasteCopiedBlock,
-    saveDocument,
-    selectByIndex,
-    selectedBlock,
-    selectedIndex,
-    splitTextLine,
-    updateTextLineContent,
-    shortcutsOpen,
     creatingDocument,
+    mode,
+    needsDocument,
+    openExternalEditor,
+    openRecentDocument,
     recentDocuments,
-    recentIndex
+    recentIndex,
+    reloadDocument,
+    scrollDocumentBy,
+    scrollDocumentTo,
+    shortcutsOpen
   ]);
 
   if (closed) {
@@ -1553,73 +1380,16 @@ export default function App() {
         <section
           ref={documentRef}
           className="document"
-          aria-label="Document"
+          aria-label="Markdown preview"
           onScroll={updateScrollProgress}
         >
-          {blocks.length === 0 ? (
-            <div className="empty-state">empty</div>
-          ) : (
-            blocks.map((block) => (
-              <BlockView
-                key={block.id}
-                block={block}
-                selected={block.id === selectedId}
-                insertMode={mode === "insert" && block.id === selectedId}
-                onSelect={() => setSelectedId(block.id)}
-                onInsert={() => {
-                  setSelectedId(block.id);
-                  setMode("insert");
-                }}
-                onExitInsert={() => {
-                  setFocusRequest(null);
-                  setMode("normal");
-                  editorRef.current?.focus();
-                }}
-                onUpdate={(patch) => updateBlock(block.id, patch)}
-                onUpdateMeta={(patch) => updateBlockMeta(block.id, patch)}
-                onTextLineChange={(value) => updateTextLineContent(block.id, value)}
-                onSplitTextLine={(value, start, end) => splitTextLine(block.id, value, start, end)}
-                onImageFile={(file) => handleImageFile(block, file)}
-                focusRequest={focusRequest?.id === block.id ? focusRequest : null}
-              />
-            ))
-          )}
+          <MarkdownDocument markdown={markdown} fileName={fileName} />
         </section>
       </section>
 
       <div className="scroll-meter" aria-hidden="true">
         <span style={{ transform: `scaleX(${scrollProgress})` }} />
       </div>
-
-      {blockPickerOpen && (
-        <div className="modal-layer" role="presentation" onMouseDown={() => setBlockPickerOpen(false)}>
-          <section
-            ref={pickerRef}
-            className="block-picker"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Insert item"
-            tabIndex={-1}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="picker-title">insert</div>
-            <div className="picker-options">
-              {BLOCK_TYPES.map(({ type, label, Icon }, index) => (
-                <button
-                  key={type}
-                  className={cx("picker-option", index === blockPickerIndex && "active")}
-                  onClick={() => chooseBlockType(type)}
-                  onMouseEnter={() => setBlockPickerIndex(index)}
-                >
-                  <Icon size={16} />
-                  <span>{label}</span>
-                  <kbd>{index + 1}</kbd>
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
 
       {shortcutsOpen && <ShortcutsOverlay refValue={shortcutsRef} onClose={() => setShortcutsOpen(false)} />}
 
@@ -1651,7 +1421,7 @@ export default function App() {
         ) : (
           <div className="message">
             <span>{message}</span>
-            <span>{saving ? "saving" : dirty ? "modified" : "saved"}</span>
+            <span>{title || fileName}</span>
           </div>
         )}
       </footer>
@@ -1687,180 +1457,5 @@ function ShortcutsOverlay({ refValue, onClose }) {
         </div>
       </section>
     </div>
-  );
-}
-
-function AutoGrowTextarea({
-  value,
-  onValueChange,
-  onExitInsert,
-  onEnter,
-  className = "",
-  spellCheck = "true",
-  multiline = true,
-  focusRequest = null
-}) {
-  const textareaRef = useRef(null);
-
-  const resize = useCallback(() => {
-    const node = textareaRef.current;
-    if (!node) {
-      return;
-    }
-    node.style.height = "auto";
-    node.style.height = `${node.scrollHeight}px`;
-  }, []);
-
-  useEffect(() => {
-    resize();
-  }, [resize, value]);
-
-  useEffect(() => {
-    const node = textareaRef.current;
-    if (!node || !focusRequest) {
-      return;
-    }
-    placeCaret(node, focusRequest.position ?? node.value.length);
-  }, [focusRequest]);
-
-  return (
-    <textarea
-      ref={textareaRef}
-      autoFocus
-      className={className}
-      value={value}
-      onFocus={(event) => {
-        if (!focusRequest) {
-          const position = event.currentTarget.value.length;
-          event.currentTarget.setSelectionRange(position, position);
-        }
-      }}
-      onChange={(event) => {
-        onValueChange(event.target.value);
-        window.requestAnimationFrame(resize);
-      }}
-      onInput={resize}
-      onKeyDown={(event) =>
-        handleTextControlKeyDown(event, {
-          setValue: (nextValue) => {
-            onValueChange(nextValue);
-            window.requestAnimationFrame(resize);
-          },
-          multiline,
-          onEnter,
-          onEscape: onExitInsert
-        })
-      }
-      spellCheck={spellCheck}
-    />
-  );
-}
-
-function BlockView({
-  block,
-  selected,
-  insertMode,
-  onSelect,
-  onInsert,
-  onExitInsert,
-  onUpdate,
-  onUpdateMeta,
-  onTextLineChange,
-  onSplitTextLine,
-  onImageFile,
-  focusRequest
-}) {
-  const articleRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const latexHtml = useMemo(() => renderLatex(block.content), [block.content]);
-
-  useEffect(() => {
-    if (!selected) {
-      return;
-    }
-    articleRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selected]);
-
-  return (
-    <article
-      ref={articleRef}
-      className={cx("block", selected && "selected", insertMode && "editing", `block-${block.type}`)}
-      onClick={onSelect}
-      onDoubleClick={onInsert}
-    >
-      <div className="block-body">
-        {block.type === "text" && (
-          insertMode ? (
-            <AutoGrowTextarea
-              className="text-line-input"
-              value={block.content}
-              onValueChange={onTextLineChange}
-              onEnter={(value, { start, end }) => onSplitTextLine(value, start, end)}
-              onExitInsert={onExitInsert}
-              multiline={false}
-              focusRequest={focusRequest}
-              spellCheck="true"
-            />
-          ) : (
-            <div className="text-render">{block.content || "\u00a0"}</div>
-          )
-        )}
-
-        {block.type === "latex" && (
-          <>
-            <div className="latex-render" dangerouslySetInnerHTML={{ __html: latexHtml }} />
-            {insertMode && (
-              <AutoGrowTextarea
-                className="latex-source"
-                value={block.content}
-                onValueChange={(nextValue) => onUpdate({ content: nextValue })}
-                onExitInsert={onExitInsert}
-                spellCheck="false"
-              />
-            )}
-          </>
-        )}
-
-        {block.type === "image" && (
-          <div className="image-block">
-            {block.content ? (
-              <img src={block.content} alt={block.meta?.caption || block.meta?.name || "Image block"} />
-            ) : (
-              <button className="image-picker" onClick={() => fileInputRef.current?.click()}>
-                <FileImage size={28} />
-              </button>
-            )}
-            {insertMode && (
-              <div className="image-controls">
-                <button type="button" onClick={() => fileInputRef.current?.click()}>
-                  <FileImage size={15} />
-                  <span>{block.meta?.name || "choose"}</span>
-                </button>
-                <input
-                  value={block.meta?.caption || ""}
-                  onChange={(event) => onUpdateMeta({ caption: event.target.value })}
-                  onKeyDown={(event) =>
-                    handleTextControlKeyDown(event, {
-                      setValue: (nextValue) => onUpdateMeta({ caption: nextValue }),
-                      onEnter: onExitInsert,
-                      onEscape: onExitInsert
-                    })
-                  }
-                  placeholder="caption"
-                />
-              </div>
-            )}
-            {block.meta?.caption && <p className="caption">{block.meta.caption}</p>}
-            <input
-              ref={fileInputRef}
-              className="hidden-file"
-              type="file"
-              accept="image/*"
-              onChange={(event) => onImageFile(event.target.files?.[0])}
-            />
-          </div>
-        )}
-      </div>
-    </article>
   );
 }

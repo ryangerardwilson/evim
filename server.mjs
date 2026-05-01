@@ -1,4 +1,5 @@
 import express from "express";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -20,25 +21,30 @@ const allowedRoots = Array.from(
 await fs.mkdir(documentsDir, { recursive: true });
 
 function hasDocumentExtension(value) {
-  return value.endsWith(".bvim") || value.endsWith(".bvim.json");
+  return String(value || "").endsWith(".md");
 }
 
 function withDocumentExtension(value) {
   if (hasDocumentExtension(value)) {
     return value;
   }
-  if (value.endsWith(".json")) {
-    return value.replace(/\.json$/, ".bvim");
-  }
-  return `${value}.bvim`;
+  return `${value}.md`;
 }
 
 function expandHome(value) {
-  return value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : value;
+  return String(value || "").startsWith("~/") ? path.join(os.homedir(), String(value).slice(2)) : value;
 }
 
 function stripDocumentExtension(value) {
-  return value.replace(/\.bvim\.json$/i, "").replace(/\.bvim$/i, "");
+  return String(value || "").replace(/\.md$/i, "");
+}
+
+function titleFromMarkdown(markdown, fallback) {
+  const heading = String(markdown || "")
+    .split(/\r?\n/)
+    .map((line) => line.match(/^#\s+(.+)$/)?.[1]?.trim())
+    .find(Boolean);
+  return heading || titleFromFileName(fallback);
 }
 
 function titleFromFileName(file) {
@@ -88,7 +94,7 @@ async function completePath(rawValue) {
   return entries
     .filter((entry) => !entry.name.startsWith("."))
     .filter((entry) => entry.name.toLowerCase().startsWith(partial.toLowerCase()))
-    .filter((entry) => entry.isDirectory() || hasDocumentExtension(entry.name) || entry.name.endsWith(".json"))
+    .filter((entry) => entry.isDirectory() || hasDocumentExtension(entry.name))
     .map((entry) => ({
       name: entry.name,
       type: entry.isDirectory() ? "directory" : "file",
@@ -125,7 +131,7 @@ function resolveDocumentPath(value) {
   const fullPath = path.resolve(withDocumentExtension(unresolved));
 
   if (!hasDocumentExtension(fullPath)) {
-    throw new Error("bvim documents must end in .bvim");
+    throw new Error("bvim documents must end in .md");
   }
 
   if (!allowedRoots.some((root) => isInsideRoot(fullPath, root))) {
@@ -135,27 +141,8 @@ function resolveDocumentPath(value) {
   return { file: displayFileName(fullPath), fullPath };
 }
 
-function createStarterDocument(file, title = titleFromFileName(file)) {
-  return {
-    app: "bvim",
-    version: 1,
-    file,
-    title,
-    savedAt: null,
-    blocks: [
-      {
-        id: `block-${Date.now()}-text`,
-        type: "text",
-        content: "",
-        meta: {}
-      }
-    ]
-  };
-}
-
-async function readJsonFile(fullPath) {
-  const raw = await fs.readFile(fullPath, "utf8");
-  return JSON.parse(raw);
+function createStarterMarkdown(file, title = titleFromFileName(file)) {
+  return `# ${title}\n\n`;
 }
 
 async function readRecentDocuments() {
@@ -191,7 +178,7 @@ async function listRecentDocuments() {
 
   for (const entry of sorted) {
     const absolute = path.resolve(entry.path);
-    if (!allowedRoots.some((root) => isInsideRoot(absolute, root))) {
+    if (!hasDocumentExtension(absolute) || !allowedRoots.some((root) => isInsideRoot(absolute, root))) {
       continue;
     }
     try {
@@ -199,17 +186,11 @@ async function listRecentDocuments() {
       if (!stats.isFile()) {
         continue;
       }
-      let title = titleFromFileName(absolute);
-      try {
-        const document = await readJsonFile(absolute);
-        title = document.title || title;
-      } catch {
-        // A malformed file can still be opened; just fall back to the path title.
-      }
+      const markdown = await fs.readFile(absolute, "utf8");
       documents.push({
         path: absolute,
         file: displayFileName(absolute),
-        title,
+        title: titleFromMarkdown(markdown, absolute),
         openedAt: entry.openedAt || stats.mtimeMs || 0
       });
     } catch {
@@ -223,8 +204,49 @@ async function listRecentDocuments() {
   return documents;
 }
 
+function resolveAssetPath(fileValue, assetValue) {
+  const { fullPath } = resolveDocumentPath(fileValue);
+  const rawAsset = String(assetValue || "").trim();
+  if (!rawAsset || /^[a-z][a-z0-9+.-]*:/i.test(rawAsset)) {
+    throw new Error("asset path must be relative to the markdown file");
+  }
+  const assetPath = path.resolve(path.dirname(fullPath), rawAsset);
+  const documentDir = path.dirname(fullPath);
+  if (!isInsideRoot(assetPath, documentDir)) {
+    throw new Error("asset path is outside the markdown directory");
+  }
+  return assetPath;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function openTerminalEditor(fullPath) {
+  const editor = process.env.BVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
+  const workdir = path.dirname(fullPath);
+  const command = `${editor} ${shellQuote(fullPath)}`;
+  const title = `bvim ${path.basename(fullPath)}`;
+
+  const terminal = process.env.BVIM_TERMINAL || "";
+  if (terminal) {
+    spawn(terminal, ["-e", "sh", "-lc", command], {
+      cwd: workdir,
+      detached: true,
+      stdio: "ignore"
+    }).unref();
+    return terminal;
+  }
+
+  spawn("xdg-terminal-exec", ["--dir", workdir, "--title", title, "sh", "-lc", command], {
+    detached: true,
+    stdio: "ignore"
+  }).unref();
+  return "xdg-terminal-exec";
+}
+
 const app = express();
-app.use(express.json({ limit: "40mb" }));
+app.use(express.json({ limit: "4mb" }));
 
 app.get("/api/documents", async (_req, res) => {
   const entries = await fs.readdir(documentsDir, { withFileTypes: true });
@@ -264,13 +286,29 @@ app.get("/api/document", async (req, res) => {
   try {
     const { file, fullPath } = resolveDocumentPath(req.query.file);
     try {
-      const document = await readJsonFile(fullPath);
-      res.json({ ...document, file, exists: true });
+      const stats = await fs.stat(fullPath);
+      const markdown = await fs.readFile(fullPath, "utf8");
+      res.json({
+        file,
+        fullPath,
+        title: titleFromMarkdown(markdown, fullPath),
+        markdown,
+        mtimeMs: stats.mtimeMs,
+        exists: true
+      });
     } catch (error) {
       if (error.code !== "ENOENT") {
         throw error;
       }
-      res.json({ ...createStarterDocument(file), exists: false });
+      const markdown = createStarterMarkdown(file);
+      res.json({
+        file,
+        fullPath,
+        title: titleFromMarkdown(markdown, fullPath),
+        markdown,
+        mtimeMs: null,
+        exists: false
+      });
     }
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -280,20 +318,43 @@ app.get("/api/document", async (req, res) => {
 app.post("/api/document", async (req, res) => {
   try {
     const { file, fullPath } = resolveDocumentPath(req.body?.file);
-    const blocks = Array.isArray(req.body?.blocks) ? req.body.blocks : [];
-    const title = String(req.body?.title || titleFromFileName(file)).slice(0, 160);
-    const document = {
-      app: "bvim",
-      version: 1,
-      file,
-      title,
-      savedAt: new Date().toISOString(),
-      blocks
-    };
+    const markdown = String(req.body?.markdown ?? createStarterMarkdown(file));
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    await fs.writeFile(fullPath, markdown, "utf8");
     await rememberRecentDocument(fullPath);
-    res.json({ ok: true, file, savedAt: document.savedAt });
+    const stats = await fs.stat(fullPath);
+    res.json({
+      ok: true,
+      file,
+      title: titleFromMarkdown(markdown, fullPath),
+      mtimeMs: stats.mtimeMs
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/open-editor", async (req, res) => {
+  try {
+    const { file, fullPath } = resolveDocumentPath(req.body?.file);
+    try {
+      await fs.access(fullPath);
+    } catch {
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, createStarterMarkdown(fullPath), "utf8");
+    }
+    await rememberRecentDocument(fullPath);
+    const terminal = openTerminalEditor(fullPath);
+    res.json({ ok: true, file, terminal });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/api/asset", (req, res) => {
+  try {
+    const assetPath = resolveAssetPath(req.query.file, req.query.path);
+    res.sendFile(assetPath);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

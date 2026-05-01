@@ -73,7 +73,7 @@ async function ensureServer() {
 function forwardReservedEditorKeys(window) {
   window.webContents.on("before-input-event", (event, input) => {
     const key = String(input.key || "").toLowerCase();
-    if (input.control && !input.alt && !input.meta && key === "q") {
+    if (input.control && !input.alt && !input.meta && key === "c") {
       event.preventDefault();
       app.quit();
       return;

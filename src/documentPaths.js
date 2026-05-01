@@ -8,19 +8,16 @@ export function slugifyTitle(value) {
 }
 
 export function hasDocumentExtension(value) {
-  return /\.bvim(?:\.json)?$/i.test(String(value || "")) || /\.json$/i.test(String(value || ""));
+  return /\.md$/i.test(String(value || ""));
 }
 
 export function documentFileNameFromName(value) {
   const rawName = String(value || "").trim();
   const baseName = rawName.split(/[\\/]/).filter(Boolean).pop() || "document";
-  if (/\.bvim(?:\.json)?$/i.test(baseName)) {
+  if (/\.md$/i.test(baseName)) {
     return baseName;
   }
-  if (/\.json$/i.test(baseName)) {
-    return baseName.replace(/\.json$/i, ".bvim");
-  }
-  return `${slugifyTitle(baseName)}.bvim`;
+  return `${slugifyTitle(baseName)}.md`;
 }
 
 export function suggestedDocumentPath(title) {
