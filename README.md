@@ -54,6 +54,7 @@ time.
 - `:` opens the command line.
 - `Ctrl+C` exits bvim entirely.
 - `:edit` opens the current file in Vim.
+- `:38` opens the current file in Vim at line 38 and centers that line.
 - `:e <name>` opens another `.md` file in the current document directory.
 - `:r` or `:w` reloads from disk.
 - `:q`, `:q!`, or `:wq` closes bvim.

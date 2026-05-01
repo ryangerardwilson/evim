@@ -172,9 +172,48 @@ button {
 }
 
 .markdown-doc {
-  width: min(860px, 100%);
+  width: min(960px, 100%);
   margin: 0 auto;
   color: var(--ink);
+}
+
+.numbered-line,
+.numbered-block {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 14px;
+  min-width: 0;
+}
+
+.numbered-line {
+  align-items: baseline;
+}
+
+.numbered-block {
+  align-items: start;
+}
+
+.line-number {
+  display: block;
+  color: rgba(255, 255, 255, 0.34);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.62;
+  text-align: right;
+  user-select: none;
+}
+
+.line-body,
+.block-body {
+  min-width: 0;
+}
+
+.block-line-numbers {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 0.8em;
 }
 
 .markdown-doc h1,
@@ -211,7 +250,10 @@ button {
 
 .markdown-doc p,
 .markdown-doc li,
-.markdown-doc blockquote {
+.markdown-doc blockquote,
+.paragraph-text,
+.quote-text,
+.rendered-list-item {
   font-size: 12px;
   line-height: 1.62;
 }
@@ -231,6 +273,40 @@ button {
   margin: 0.16em 0;
 }
 
+.paragraph-lines {
+  margin: 0.55em 0;
+}
+
+.paragraph-text {
+  min-height: 1.62em;
+}
+
+.quote-lines {
+  margin: 0.85em 0;
+}
+
+.quote-text {
+  padding-left: 14px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--muted);
+}
+
+.rendered-list {
+  margin: 0.55em 0 0.75em;
+}
+
+.rendered-list-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 8px;
+  min-height: 1.62em;
+}
+
+.list-marker {
+  color: var(--muted);
+  text-align: right;
+}
+
 .markdown-doc blockquote {
   margin: 0.85em 0;
   padding: 0.1em 0 0.1em 14px;
@@ -244,17 +320,22 @@ button {
   padding: 0 4px;
 }
 
-.markdown-doc pre {
-  overflow: auto;
+.code-lines {
+  overflow-x: auto;
   margin: 1em 0;
-  padding: 10px 12px;
+  padding: 10px 0;
   border-left: 2px solid var(--line-strong);
   background: rgba(0, 0, 0, 0.38);
   scrollbar-width: none;
 }
 
-.markdown-doc pre::-webkit-scrollbar {
+.code-lines::-webkit-scrollbar {
   display: none;
+}
+
+.markdown-doc pre {
+  margin: 0;
+  overflow: visible;
 }
 
 .markdown-doc pre code {
@@ -289,6 +370,10 @@ button {
   margin: 1.2em 0;
   border: 0;
   background: var(--line);
+}
+
+.latex-line {
+  margin: 1em 0;
 }
 
 .inline-latex {
@@ -863,6 +948,12 @@ textarea:focus {
 
   .document {
     padding: 12px 8px 38px;
+  }
+
+  .numbered-line,
+  .numbered-block {
+    grid-template-columns: 34px minmax(0, 1fr);
+    column-gap: 8px;
   }
 
   .block {

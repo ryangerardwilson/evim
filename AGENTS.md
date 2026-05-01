@@ -5,7 +5,9 @@
 `bvim` is a CLI-launched local browser-based Markdown previewer with Vim-backed
 editing. It is not a terminal TUI. Keep the main workflow keyboard-first and
 preserve `bvim <file.md>`, `:e <file>`, `:q`, `:q!`, `:wq`, `:edit`, `r`, and
-normal-mode `i`/`Enter` opening the current Markdown file in Vim.
+normal-mode `i`/`Enter` opening the current Markdown file in Vim. Preserve
+numeric commands such as `:38` opening the current Markdown file in Vim at that
+line and centering it.
 In setup and command inputs, preserve `Ctrl+[` as escape, `Ctrl+M` as enter,
 `Ctrl+I` as tab, and the local Emacs-style editing bindings.
 Keep close-tab shortcut suppression for `Ctrl+W`/`Meta+W` so browser defaults

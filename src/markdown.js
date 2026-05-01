@@ -11,6 +11,10 @@ function isMarkdownBoundary(line) {
   );
 }
 
+function lineNumbers(startLine, count) {
+  return Array.from({ length: Math.max(1, count) }, (_, index) => startLine + index);
+}
+
 export function parseMarkdown(markdown) {
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
   const nodes = [];
@@ -19,6 +23,7 @@ export function parseMarkdown(markdown) {
   while (index < lines.length) {
     const line = lines[index];
     const trimmed = line.trim();
+    const sourceLine = index + 1;
 
     if (!trimmed) {
       index += 1;
@@ -36,7 +41,14 @@ export function parseMarkdown(markdown) {
       if (index < lines.length) {
         index += 1;
       }
-      nodes.push({ type: "code", language, value: codeLines.join("\n") });
+      nodes.push({
+        type: "code",
+        line: sourceLine,
+        lineNumbers: lineNumbers(sourceLine + 1, codeLines.length),
+        lines: codeLines,
+        language,
+        value: codeLines.join("\n")
+      });
       continue;
     }
 
@@ -60,26 +72,31 @@ export function parseMarkdown(markdown) {
           index += 1;
         }
       }
-      nodes.push({ type: "latex", value: latexLines.join("\n").trim() });
+      nodes.push({
+        type: "latex",
+        line: sourceLine,
+        lineNumbers: lineNumbers(sourceLine, index - sourceLine + 1),
+        value: latexLines.join("\n").trim()
+      });
       continue;
     }
 
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
-      nodes.push({ type: "heading", level: heading[1].length, value: heading[2] });
+      nodes.push({ type: "heading", line: sourceLine, level: heading[1].length, value: heading[2] });
       index += 1;
       continue;
     }
 
     const image = trimmed.match(/^!\[([^\]]*)]\(([^)\s]+)(?:\s+"([^"]+)")?\)\s*$/);
     if (image) {
-      nodes.push({ type: "image", alt: image[1], src: image[2], title: image[3] || "" });
+      nodes.push({ type: "image", line: sourceLine, alt: image[1], src: image[2], title: image[3] || "" });
       index += 1;
       continue;
     }
 
     if (/^[-*_]{3,}\s*$/.test(trimmed)) {
-      nodes.push({ type: "rule" });
+      nodes.push({ type: "rule", line: sourceLine });
       index += 1;
       continue;
     }
@@ -90,7 +107,13 @@ export function parseMarkdown(markdown) {
         quoteLines.push(lines[index].replace(/^>\s?/, ""));
         index += 1;
       }
-      nodes.push({ type: "quote", value: quoteLines.join("\n") });
+      nodes.push({
+        type: "quote",
+        line: sourceLine,
+        lineNumbers: lineNumbers(sourceLine, quoteLines.length),
+        lines: quoteLines,
+        value: quoteLines.join("\n")
+      });
       continue;
     }
 
@@ -98,10 +121,15 @@ export function parseMarkdown(markdown) {
       const items = [];
       const ordered = /^\s*\d+\.\s+/.test(line);
       while (index < lines.length && /^(\s*)([-*+]|\d+\.)\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^(\s*)([-*+]|\d+\.)\s+/, ""));
+        const match = lines[index].match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/);
+        items.push({
+          line: index + 1,
+          marker: match?.[2] || (ordered ? `${items.length + 1}.` : "-"),
+          value: match?.[3] || ""
+        });
         index += 1;
       }
-      nodes.push({ type: "list", ordered, items });
+      nodes.push({ type: "list", line: sourceLine, ordered, items });
       continue;
     }
 
@@ -111,7 +139,13 @@ export function parseMarkdown(markdown) {
       paragraphLines.push(lines[index]);
       index += 1;
     }
-    nodes.push({ type: "paragraph", value: paragraphLines.join("\n") });
+    nodes.push({
+      type: "paragraph",
+      line: sourceLine,
+      lineNumbers: lineNumbers(sourceLine, paragraphLines.length),
+      lines: paragraphLines,
+      value: paragraphLines.join("\n")
+    });
   }
 
   return nodes;

@@ -17,6 +17,7 @@ const SHORTCUT_GROUPS = [
       ["j / k", "smooth scroll down / up"],
       ["gg / G", "scroll top / bottom"],
       ["i / enter", "open file in vim"],
+      [":38", "open line 38 in vim"],
       ["r", "reload markdown"],
       [":", "command line"],
       ["ctrl+c", "quit bvim"]
@@ -27,6 +28,7 @@ const SHORTCUT_GROUPS = [
     items: [
       [":e path", "open markdown path"],
       [":edit", "open current file in vim"],
+      [":38", "open current file at line 38"],
       [":r", "reload current file"],
       [":q", "quit"],
       [":q!", "quit"],
@@ -410,6 +412,37 @@ function markdownImageSource(fileName, src) {
   return `/api/asset?file=${encodeURIComponent(fileName)}&path=${encodeURIComponent(src)}`;
 }
 
+function LineNumber({ value }) {
+  return (
+    <span className="line-number" aria-hidden="true">
+      {value}
+    </span>
+  );
+}
+
+function NumberedLine({ line, className, children }) {
+  return (
+    <div className={cx("numbered-line", className)} data-line={line}>
+      <LineNumber value={line} />
+      <div className="line-body">{children}</div>
+    </div>
+  );
+}
+
+function NumberedBlock({ lineNumbers = [], className, children }) {
+  const numbers = lineNumbers.length ? lineNumbers : [""];
+  return (
+    <div className={cx("numbered-block", className)}>
+      <div className="block-line-numbers" aria-hidden="true">
+        {numbers.map((line, index) => (
+          <LineNumber key={`${line}-${index}`} value={line} />
+        ))}
+      </div>
+      <div className="block-body">{children}</div>
+    </div>
+  );
+}
+
 function MarkdownDocument({ markdown, fileName }) {
   const nodes = useMemo(() => parseMarkdown(markdown), [markdown]);
 
@@ -423,63 +456,109 @@ function MarkdownDocument({ markdown, fileName }) {
         if (node.type === "heading") {
           const Tag = `h${node.level}`;
           return (
-            <Tag key={index}>
-              <MarkdownInline value={node.value} />
-            </Tag>
+            <NumberedLine key={index} line={node.line} className="heading-line">
+              <Tag>
+                <MarkdownInline value={node.value} />
+              </Tag>
+            </NumberedLine>
           );
         }
         if (node.type === "paragraph") {
           return (
-            <p key={index}>
-              <MarkdownInline value={node.value} />
-            </p>
+            <div key={index} className="paragraph-lines">
+              {node.lines.map((line, lineIndex) => (
+                <NumberedLine
+                  key={`${node.lineNumbers[lineIndex]}-${lineIndex}`}
+                  line={node.lineNumbers[lineIndex]}
+                  className="paragraph-line"
+                >
+                  <div className="paragraph-text">
+                    <MarkdownInline value={line} />
+                  </div>
+                </NumberedLine>
+              ))}
+            </div>
           );
         }
         if (node.type === "list") {
-          const ListTag = node.ordered ? "ol" : "ul";
           return (
-            <ListTag key={index}>
+            <div key={index} className={cx("rendered-list", node.ordered && "ordered")}>
               {node.items.map((item, itemIndex) => (
-                <li key={itemIndex}>
-                  <MarkdownInline value={item} />
-                </li>
+                <NumberedLine key={`${item.line}-${itemIndex}`} line={item.line} className="list-line">
+                  <div className="rendered-list-item">
+                    <span className="list-marker" aria-hidden="true">
+                      {item.marker}
+                    </span>
+                    <span>
+                      <MarkdownInline value={item.value} />
+                    </span>
+                  </div>
+                </NumberedLine>
               ))}
-            </ListTag>
+            </div>
           );
         }
         if (node.type === "quote") {
           return (
-            <blockquote key={index}>
-              <MarkdownInline value={node.value} />
-            </blockquote>
+            <div key={index} className="quote-lines">
+              {node.lines.map((line, lineIndex) => (
+                <NumberedLine
+                  key={`${node.lineNumbers[lineIndex]}-${lineIndex}`}
+                  line={node.lineNumbers[lineIndex]}
+                  className="quote-line"
+                >
+                  <div className="quote-text">
+                    <MarkdownInline value={line} />
+                  </div>
+                </NumberedLine>
+              ))}
+            </div>
           );
         }
         if (node.type === "code") {
+          const codeLines = node.lines.length ? node.lines : [""];
           return (
-            <pre key={index} data-language={node.language || undefined}>
-              <code>{node.value}</code>
-            </pre>
+            <div key={index} className="code-lines" data-language={node.language || undefined}>
+              {codeLines.map((line, lineIndex) => (
+                <NumberedLine
+                  key={`${node.lineNumbers[lineIndex]}-${lineIndex}`}
+                  line={node.lineNumbers[lineIndex]}
+                  className="code-line"
+                >
+                  <pre>
+                    <code>{line || " "}</code>
+                  </pre>
+                </NumberedLine>
+              ))}
+            </div>
           );
         }
         if (node.type === "latex") {
           return (
-            <div
-              key={index}
-              className="latex-render"
-              dangerouslySetInnerHTML={{ __html: renderLatex(node.value, true) }}
-            />
+            <NumberedBlock key={index} lineNumbers={node.lineNumbers} className="latex-line">
+              <div
+                className="latex-render"
+                dangerouslySetInnerHTML={{ __html: renderLatex(node.value, true) }}
+              />
+            </NumberedBlock>
           );
         }
         if (node.type === "image") {
           return (
-            <figure key={index}>
-              <img src={markdownImageSource(fileName, node.src)} alt={node.alt || node.title || ""} />
-              {(node.title || node.alt) && <figcaption>{node.title || node.alt}</figcaption>}
-            </figure>
+            <NumberedLine key={index} line={node.line} className="image-line">
+              <figure>
+                <img src={markdownImageSource(fileName, node.src)} alt={node.alt || node.title || ""} />
+                {(node.title || node.alt) && <figcaption>{node.title || node.alt}</figcaption>}
+              </figure>
+            </NumberedLine>
           );
         }
         if (node.type === "rule") {
-          return <hr key={index} />;
+          return (
+            <NumberedLine key={index} line={node.line} className="rule-line">
+              <hr />
+            </NumberedLine>
+          );
         }
         return null;
       })}
@@ -816,21 +895,29 @@ export default function App() {
     }
   }, []);
 
-  const openExternalEditor = useCallback(async () => {
+  const openExternalEditor = useCallback(async (lineNumber = null) => {
     if (!fileName) {
       return;
     }
     try {
+      const line = lineNumber === null ? null : Number(lineNumber);
+      if (line !== null && (!Number.isInteger(line) || line < 1)) {
+        throw new Error("line must be a positive integer");
+      }
       const response = await fetch("/api/open-editor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: fileName })
+        body: JSON.stringify({ file: fileName, line })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload.error || "Unable to open vim");
       }
-      setMessage(`opened in ${payload.terminal || "terminal"}`);
+      setMessage(
+        payload.line
+          ? `opened line ${payload.line} in ${payload.terminal || "terminal"}`
+          : `opened in ${payload.terminal || "terminal"}`
+      );
     } catch (error) {
       setMessage(error.message);
     }
@@ -876,6 +963,12 @@ export default function App() {
 
         if (value === "edit" || value === "i") {
           await openExternalEditor();
+          setMode("normal");
+          return;
+        }
+
+        if (/^\d+$/.test(value)) {
+          await openExternalEditor(Number(value));
           setMode("normal");
           return;
         }

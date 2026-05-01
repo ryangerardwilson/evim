@@ -222,6 +222,22 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
+function editorLineFromRequest(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  const line = Number(value);
+  if (!Number.isInteger(line) || line < 1) {
+    throw new Error("line must be a positive integer");
+  }
+  return line;
+}
+
+function buildEditorCommand(editor, fullPath, line) {
+  const lineArgs = line ? ` +${line} +${shellQuote("normal! zz")}` : "";
+  return `${editor}${lineArgs} ${shellQuote(fullPath)}`;
+}
+
 function commandExists(command) {
   return new Promise((resolve) => {
     const child = spawn("sh", ["-lc", `command -v ${shellQuote(command)} >/dev/null 2>&1`], {
@@ -336,10 +352,10 @@ function launchTerminal({ executable, args, workdir }) {
   });
 }
 
-async function openTerminalEditor(fullPath) {
+async function openTerminalEditor(fullPath, line = null) {
   const editor = process.env.BVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
   const workdir = path.dirname(fullPath);
-  const command = `${editor} ${shellQuote(fullPath)}`;
+  const command = buildEditorCommand(editor, fullPath, line);
   const title = `bvim ${path.basename(fullPath)}`;
   const terminal = await resolveTerminalCommand({ workdir, title, command });
   await launchTerminal({ ...terminal, workdir });
@@ -438,6 +454,7 @@ app.post("/api/document", async (req, res) => {
 app.post("/api/open-editor", async (req, res) => {
   try {
     const { file, fullPath } = resolveDocumentPath(req.body?.file);
+    const line = editorLineFromRequest(req.body?.line);
     try {
       await fs.access(fullPath);
     } catch {
@@ -445,8 +462,8 @@ app.post("/api/open-editor", async (req, res) => {
       await fs.writeFile(fullPath, createStarterMarkdown(fullPath), "utf8");
     }
     await rememberRecentDocument(fullPath);
-    const terminal = await openTerminalEditor(fullPath);
-    res.json({ ok: true, file, terminal });
+    const terminal = await openTerminalEditor(fullPath, line);
+    res.json({ ok: true, file, terminal, line });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
