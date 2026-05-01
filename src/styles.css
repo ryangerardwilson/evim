@@ -210,10 +210,12 @@ button {
 }
 
 .block-line-numbers {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding-top: 0.8em;
+  align-self: start;
+  min-width: 0;
+}
+
+.block-line-numbers .line-number {
+  line-height: 1.4;
 }
 
 .markdown-doc h1,
@@ -373,7 +375,7 @@ button {
 }
 
 .latex-line {
-  margin: 1em 0;
+  margin: 0.55em 0;
 }
 
 .inline-latex {
@@ -461,8 +463,27 @@ textarea:focus {
 
 .latex-render {
   overflow-x: auto;
-  padding: 4px 0;
+  padding: 0;
   color: var(--ink);
+}
+
+.latex-render .katex-display {
+  margin: 0;
+  text-align: left;
+}
+
+.latex-stack {
+  display: grid;
+  gap: 0.12em;
+}
+
+.latex-stack-row {
+  min-width: 0;
+}
+
+.latex-stack-row .katex-display {
+  margin: 0;
+  text-align: left;
 }
 
 .latex-source {

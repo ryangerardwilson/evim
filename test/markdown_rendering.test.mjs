@@ -43,6 +43,16 @@ test("line numbers follow source lines across markdown nodes", () => {
   );
 });
 
+test("latex block tracks source range without preserving fence whitespace", () => {
+  const nodes = parseMarkdown("before\n\n$$\na &= b\nc &= d\n$$\n");
+  assert.deepEqual(nodes[1], {
+    type: "latex",
+    line: 3,
+    lineNumbers: [3, 4, 5, 6],
+    value: "a &= b\nc &= d"
+  });
+});
+
 test("inline parsing keeps text newlines around inline markup", () => {
   assert.deepEqual(inlineParts("one\n`two`\n$three$"), [
     { type: "text", value: "one\n" },

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import katex from "katex";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
+import { leftAlignedLatexRows } from "./latex.js";
 import { inlineParts, parseMarkdown } from "./markdown.js";
 
 function initialFileName() {
@@ -426,17 +427,36 @@ function NumberedLine({ line, className, children }) {
 }
 
 function NumberedBlock({ lineNumbers = [], className, children }) {
-  const numbers = lineNumbers.length ? lineNumbers : [""];
+  const firstLine = lineNumbers[0] ?? "";
+  const lastLine = lineNumbers[lineNumbers.length - 1];
+  const lineLabel = lineNumbers.length > 1 ? `${firstLine}-${lastLine}` : firstLine;
   return (
     <div className={cx("numbered-block", className)}>
       <div className="block-line-numbers" aria-hidden="true">
-        {numbers.map((line, index) => (
-          <LineNumber key={`${line}-${index}`} value={line} />
-        ))}
+        <LineNumber value={lineLabel} />
       </div>
       <div className="block-body">{children}</div>
     </div>
   );
+}
+
+function LatexBlock({ value }) {
+  const rows = leftAlignedLatexRows(value);
+  if (rows) {
+    return (
+      <div className="latex-render latex-stack">
+        {rows.map((row, index) => (
+          <div
+            key={index}
+            className="latex-stack-row"
+            dangerouslySetInnerHTML={{ __html: renderLatex(row, true) }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return <div className="latex-render" dangerouslySetInnerHTML={{ __html: renderLatex(value, true) }} />;
 }
 
 function MarkdownDocument({ markdown, fileName }) {
@@ -532,10 +552,7 @@ function MarkdownDocument({ markdown, fileName }) {
         if (node.type === "latex") {
           return (
             <NumberedBlock key={index} lineNumbers={node.lineNumbers} className="latex-line">
-              <div
-                className="latex-render"
-                dangerouslySetInnerHTML={{ __html: renderLatex(node.value, true) }}
-              />
+              <LatexBlock value={node.value} />
             </NumberedBlock>
           );
         }
