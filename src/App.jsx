@@ -442,8 +442,10 @@ export default function App() {
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
   const [copiedBlock, setCopiedBlock] = useState(null);
+  const [scrollProgress, setScrollProgress] = useState(1);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
+  const documentRef = useRef(null);
   const editorRef = useRef(null);
   const pickerRef = useRef(null);
   const setupTitleRef = useRef(null);
@@ -458,6 +460,18 @@ export default function App() {
   );
 
   const selectedBlock = selectedIndex >= 0 ? blocks[selectedIndex] : null;
+
+  const updateScrollProgress = useCallback(() => {
+    const node = documentRef.current;
+    if (!node) {
+      setScrollProgress(1);
+      return;
+    }
+
+    const maxScroll = node.scrollHeight - node.clientHeight;
+    const nextProgress = maxScroll > 0 ? node.scrollTop / maxScroll : 1;
+    setScrollProgress(Math.max(0, Math.min(1, nextProgress)));
+  }, []);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -520,6 +534,16 @@ export default function App() {
     }
     loadDocument(START_FILE).catch((error) => setMessage(error.message));
   }, [loadDocument, loadRecentDocuments]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updateScrollProgress);
+    return () => window.cancelAnimationFrame(frame);
+  }, [blocks, mode, selectedId, updateScrollProgress]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateScrollProgress);
+    return () => window.removeEventListener("resize", updateScrollProgress);
+  }, [updateScrollProgress]);
 
   const saveDocument = useCallback(
     async (targetFile = fileName) => {
@@ -1401,7 +1425,12 @@ export default function App() {
   return (
     <main className="app-shell" ref={editorRef} tabIndex={-1}>
       <section className="workspace">
-        <section className="document" aria-label="Document blocks">
+        <section
+          ref={documentRef}
+          className="document"
+          aria-label="Document blocks"
+          onScroll={updateScrollProgress}
+        >
           {blocks.length === 0 ? (
             <div className="empty-state">empty</div>
           ) : (
@@ -1429,6 +1458,10 @@ export default function App() {
           )}
         </section>
       </section>
+
+      <div className="scroll-meter" aria-hidden="true">
+        <span style={{ transform: `scaleX(${scrollProgress})` }} />
+      </div>
 
       {blockPickerOpen && (
         <div className="modal-layer" role="presentation" onMouseDown={() => setBlockPickerOpen(false)}>
