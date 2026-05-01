@@ -32,7 +32,7 @@ features:
   # bvim
   bvim
 
-  open or create a block document in the desktop editor
+  open or create a line document in the desktop editor
   # bvim <file.bvim>
   bvim notes.bvim
   bvim ~/Documents/notes.bvim

@@ -14,24 +14,24 @@ function initialFileName() {
 
 const START_FILE = initialFileName();
 const BLOCK_TYPES = [
-  { type: "text", label: "Text", Icon: Type },
-  { type: "image", label: "Image", Icon: FileImage },
-  { type: "latex", label: "LaTeX", Icon: Sigma }
+  { type: "text", label: "Text line", Icon: Type },
+  { type: "image", label: "Image embed", Icon: FileImage },
+  { type: "latex", label: "LaTeX embed", Icon: Sigma }
 ];
 const SHORTCUT_GROUPS = [
   {
     title: "normal",
     items: [
       ["?", "toggle shortcuts"],
-      ["n", "new block"],
-      ["j / k", "select next / previous block"],
-      ["gg / G", "select first / last block"],
-      ["J / K", "move selected block down / up"],
-      ["i / enter", "edit selected block"],
-      ["o / O", "insert text block after / before"],
-      ["yy", "copy selected block"],
-      ["p / P", "paste block after / before"],
-      ["x", "delete selected block"],
+      ["n", "new line or embed"],
+      ["j / k", "select next / previous item"],
+      ["gg / G", "select first / last item"],
+      ["J / K", "move selected item down / up"],
+      ["i / enter", "edit selected item"],
+      ["o / O", "insert text line after / before"],
+      ["yy", "copy selected item"],
+      ["p / P", "paste item after / before"],
+      ["x", "delete selected item"],
       [":", "command line"],
       ["ctrl+c", "quit bvim"]
     ]
@@ -63,10 +63,10 @@ const SHORTCUT_GROUPS = [
     ]
   },
   {
-    title: "block picker",
+    title: "insert picker",
     items: [
       ["j / k", "move choice"],
-      ["1 / 2 / 3", "choose block type"],
+      ["1 / 2 / 3", "choose item type"],
       ["enter", "insert selected type"],
       ["esc", "cancel"]
     ]
@@ -111,12 +111,49 @@ function makeBlock(type) {
   return { id, type: "text", content: "", meta: {} };
 }
 
+function makeTextLine(content = "") {
+  return { id: makeBlockId(), type: "text", content, meta: {} };
+}
+
 function cloneBlock(block) {
   return {
     ...block,
     id: makeBlockId(),
     meta: { ...(block.meta || {}) }
   };
+}
+
+function normalizeDocumentItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    if (item.type !== "text") {
+      return [{ ...item, meta: { ...(item.meta || {}) } }];
+    }
+
+    const lines = String(item.content || "").split("\n");
+    return lines.map((line, index) => ({
+      ...item,
+      id: index === 0 ? item.id || makeBlockId() : makeBlockId(),
+      content: line,
+      meta: { ...(item.meta || {}) }
+    }));
+  });
+}
+
+function itemLabel(item) {
+  if (!item) {
+    return "item";
+  }
+  if (item.type === "text") {
+    return "line";
+  }
+  return `${item.type} embed`;
 }
 
 function cx(...parts) {
@@ -293,12 +330,12 @@ function handleTextControlKeyDown(event, { setValue, multiline = false, onEnter,
     return true;
   }
 
-  if (ctrl && (key === "m" || key === "Enter")) {
+  if (isEnterKey(event)) {
     event.preventDefault();
     if (multiline) {
       replaceRange(start, end, "\n");
     } else if (onEnter) {
-      onEnter(value);
+      onEnter(value, { start, end, target });
     }
     return true;
   }
@@ -444,6 +481,7 @@ export default function App() {
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
   const [copiedBlock, setCopiedBlock] = useState(null);
+  const [focusRequest, setFocusRequest] = useState(null);
   const [scrollProgress, setScrollProgress] = useState(1);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
@@ -499,7 +537,7 @@ export default function App() {
       throw new Error(payload.error || "Unable to open document");
     }
     const document = await response.json();
-    const nextBlocks = Array.isArray(document.blocks) ? document.blocks : [];
+    const nextBlocks = normalizeDocumentItems(document.blocks);
     setFileName(document.file || nextFile || START_FILE);
     setTitle(document.title || nextFile || "document");
     setBlocks(nextBlocks);
@@ -589,7 +627,7 @@ export default function App() {
       }
 
       if (existing.exists) {
-        const nextBlocks = Array.isArray(existing.blocks) ? existing.blocks : [];
+        const nextBlocks = normalizeDocumentItems(existing.blocks);
         setFileName(existing.file || targetFile);
         setTitle(existing.title || nextTitle);
         setBlocks(nextBlocks);
@@ -602,7 +640,7 @@ export default function App() {
         return;
       }
 
-      const starterBlocks = [makeBlock("text")];
+      const starterBlocks = [makeTextLine()];
       const saveResponse = await fetch("/api/document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -761,7 +799,7 @@ export default function App() {
 
   const addBlock = useCallback(
     (type, offset = 1) => {
-      const block = makeBlock(type);
+      const block = type === "text" ? makeTextLine() : makeBlock(type);
       setBlocks((current) => {
         if (!current.length || selectedIndex < 0) {
           return [block];
@@ -772,6 +810,9 @@ export default function App() {
       });
       setSelectedId(block.id);
       setMode("insert");
+      if (block.type === "text") {
+        setFocusRequest({ id: block.id, position: 0, token: Date.now() });
+      }
       setBlockPickerOpen(false);
       markDirty();
     },
@@ -834,6 +875,60 @@ export default function App() {
     [markDirty]
   );
 
+  const splitTextLine = useCallback(
+    (id, value, start, end = start) => {
+      const before = value.slice(0, start);
+      const after = value.slice(end);
+      const nextLine = makeTextLine(after);
+
+      setBlocks((current) => {
+        const index = current.findIndex((block) => block.id === id);
+        if (index < 0) {
+          return current;
+        }
+        const next = [...current];
+        next[index] = { ...next[index], content: before };
+        next.splice(index + 1, 0, nextLine);
+        return next;
+      });
+      setSelectedId(nextLine.id);
+      setMode("insert");
+      setFocusRequest({ id: nextLine.id, position: 0, token: Date.now() });
+      markDirty();
+    },
+    [markDirty]
+  );
+
+  const updateTextLineContent = useCallback(
+    (id, value) => {
+      const lines = String(value).split("\n");
+      if (lines.length === 1) {
+        updateBlock(id, { content: value });
+        return;
+      }
+
+      const lineBlocks = lines.map((line) => makeTextLine(line));
+      setBlocks((current) => {
+        const index = current.findIndex((block) => block.id === id);
+        if (index < 0) {
+          return current;
+        }
+
+        const firstLine = { ...current[index], content: lineBlocks[0].content };
+        const next = [...current];
+        next.splice(index, 1, firstLine, ...lineBlocks.slice(1));
+        return next;
+      });
+
+      const lastLine = lineBlocks[lineBlocks.length - 1];
+      setSelectedId(lastLine.id);
+      setMode("insert");
+      setFocusRequest({ id: lastLine.id, position: lastLine.content.length, token: Date.now() });
+      markDirty();
+    },
+    [markDirty, updateBlock]
+  );
+
   const deleteSelected = useCallback(() => {
     if (!selectedBlock) {
       return;
@@ -848,11 +943,11 @@ export default function App() {
 
   const copySelectedBlock = useCallback(() => {
     if (!selectedBlock) {
-      setMessage("no block selected");
+      setMessage("no item selected");
       return;
     }
     setCopiedBlock(cloneBlock(selectedBlock));
-    setMessage(`copied ${selectedBlock.type} block`);
+    setMessage(`copied ${itemLabel(selectedBlock)}`);
   }, [selectedBlock]);
 
   const pasteCopiedBlock = useCallback(
@@ -874,7 +969,7 @@ export default function App() {
       });
       setSelectedId(block.id);
       setMode("normal");
-      setMessage(`pasted ${block.type} block`);
+      setMessage(`pasted ${itemLabel(block)}`);
       markDirty();
     },
     [copiedBlock, markDirty, selectedIndex]
@@ -1137,6 +1232,7 @@ export default function App() {
       if (mode === "insert") {
         if (isEscapeKey(event)) {
           event.preventDefault();
+          setFocusRequest(null);
           setMode("normal");
           editorRef.current?.focus();
         }
@@ -1254,6 +1350,7 @@ export default function App() {
       if (event.key === "i" || isEnterKey(event)) {
         event.preventDefault();
         if (selectedBlock) {
+          setFocusRequest(null);
           setMode("insert");
         }
         return;
@@ -1280,7 +1377,7 @@ export default function App() {
       if (event.key === "y") {
         event.preventDefault();
         pendingKeyRef.current = "y";
-        setMessage("yank block");
+        setMessage("yank item");
         return;
       }
 
@@ -1322,6 +1419,8 @@ export default function App() {
     selectByIndex,
     selectedBlock,
     selectedIndex,
+    splitTextLine,
+    updateTextLineContent,
     shortcutsOpen,
     creatingDocument,
     recentDocuments,
@@ -1454,17 +1553,16 @@ export default function App() {
         <section
           ref={documentRef}
           className="document"
-          aria-label="Document blocks"
+          aria-label="Document"
           onScroll={updateScrollProgress}
         >
           {blocks.length === 0 ? (
             <div className="empty-state">empty</div>
           ) : (
-            blocks.map((block, index) => (
+            blocks.map((block) => (
               <BlockView
                 key={block.id}
                 block={block}
-                index={index}
                 selected={block.id === selectedId}
                 insertMode={mode === "insert" && block.id === selectedId}
                 onSelect={() => setSelectedId(block.id)}
@@ -1473,12 +1571,16 @@ export default function App() {
                   setMode("insert");
                 }}
                 onExitInsert={() => {
+                  setFocusRequest(null);
                   setMode("normal");
                   editorRef.current?.focus();
                 }}
                 onUpdate={(patch) => updateBlock(block.id, patch)}
                 onUpdateMeta={(patch) => updateBlockMeta(block.id, patch)}
+                onTextLineChange={(value) => updateTextLineContent(block.id, value)}
+                onSplitTextLine={(value, start, end) => splitTextLine(block.id, value, start, end)}
                 onImageFile={(file) => handleImageFile(block, file)}
+                focusRequest={focusRequest?.id === block.id ? focusRequest : null}
               />
             ))
           )}
@@ -1496,11 +1598,11 @@ export default function App() {
             className="block-picker"
             role="dialog"
             aria-modal="true"
-            aria-label="New block"
+            aria-label="Insert item"
             tabIndex={-1}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="picker-title">new block</div>
+            <div className="picker-title">insert</div>
             <div className="picker-options">
               {BLOCK_TYPES.map(({ type, label, Icon }, index) => (
                 <button
@@ -1588,7 +1690,16 @@ function ShortcutsOverlay({ refValue, onClose }) {
   );
 }
 
-function AutoGrowTextarea({ value, onValueChange, onExitInsert, className = "", spellCheck = "true" }) {
+function AutoGrowTextarea({
+  value,
+  onValueChange,
+  onExitInsert,
+  onEnter,
+  className = "",
+  spellCheck = "true",
+  multiline = true,
+  focusRequest = null
+}) {
   const textareaRef = useRef(null);
 
   const resize = useCallback(() => {
@@ -1604,12 +1715,26 @@ function AutoGrowTextarea({ value, onValueChange, onExitInsert, className = "", 
     resize();
   }, [resize, value]);
 
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node || !focusRequest) {
+      return;
+    }
+    placeCaret(node, focusRequest.position ?? node.value.length);
+  }, [focusRequest]);
+
   return (
     <textarea
       ref={textareaRef}
       autoFocus
       className={className}
       value={value}
+      onFocus={(event) => {
+        if (!focusRequest) {
+          const position = event.currentTarget.value.length;
+          event.currentTarget.setSelectionRange(position, position);
+        }
+      }}
       onChange={(event) => {
         onValueChange(event.target.value);
         window.requestAnimationFrame(resize);
@@ -1621,7 +1746,8 @@ function AutoGrowTextarea({ value, onValueChange, onExitInsert, className = "", 
             onValueChange(nextValue);
             window.requestAnimationFrame(resize);
           },
-          multiline: true,
+          multiline,
+          onEnter,
           onEscape: onExitInsert
         })
       }
@@ -1632,7 +1758,6 @@ function AutoGrowTextarea({ value, onValueChange, onExitInsert, className = "", 
 
 function BlockView({
   block,
-  index,
   selected,
   insertMode,
   onSelect,
@@ -1640,7 +1765,10 @@ function BlockView({
   onExitInsert,
   onUpdate,
   onUpdateMeta,
-  onImageFile
+  onTextLineChange,
+  onSplitTextLine,
+  onImageFile,
+  focusRequest
 }) {
   const articleRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1656,18 +1784,21 @@ function BlockView({
   return (
     <article
       ref={articleRef}
-      className={cx("block", selected && "selected", `block-${block.type}`)}
+      className={cx("block", selected && "selected", insertMode && "editing", `block-${block.type}`)}
       onClick={onSelect}
       onDoubleClick={onInsert}
     >
-      <div className="block-number">{String(index + 1).padStart(2, "0")}</div>
       <div className="block-body">
         {block.type === "text" && (
           insertMode ? (
             <AutoGrowTextarea
+              className="text-line-input"
               value={block.content}
-              onValueChange={(nextValue) => onUpdate({ content: nextValue })}
+              onValueChange={onTextLineChange}
+              onEnter={(value, { start, end }) => onSplitTextLine(value, start, end)}
               onExitInsert={onExitInsert}
+              multiline={false}
+              focusRequest={focusRequest}
               spellCheck="true"
             />
           ) : (

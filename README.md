@@ -1,8 +1,8 @@
 # bvim
 
-`bvim` is a CLI-launched block document editor for `.bvim` files. It opens a
-small local desktop browser shell, lets you edit text, image, and LaTeX blocks,
-and saves back to the file you opened with Vim-style commands.
+`bvim` is a CLI-launched line document editor for `.bvim` files. It opens a
+small local desktop browser shell, lets you edit text lines with embedded image
+and LaTeX items, and saves back to the file you opened with Vim-style commands.
 
 ## Install
 
@@ -44,15 +44,19 @@ port at or above `8000`, so multiple `.bvim` files can be open at the same time.
 
 ## Editing
 
-- `n` opens the block picker.
+- `n` opens the insert picker.
 - `?` toggles the shortcut overlay.
-- Text, image, and LaTeX blocks are available from the picker.
-- `j` and `k` move the active block in normal mode.
-- `J` and `K` move the selected block down and up.
-- `i` or `Enter` edits the selected block.
+- Text lines, image embeds, and LaTeX embeds are available from the picker.
+- `j` and `k` move the active item in normal mode.
+- `gg` and `G` jump to the first and last item.
+- `J` and `K` move the selected item down and up.
+- `i` or `Enter` edits the selected item.
+- `Enter` inside a text line splits it into a new line.
+- `yy` copies the selected item.
+- `p` and `P` paste the copied item after or before the current item.
 - `Esc` or `Ctrl+[` returns to normal mode.
 - `:` opens the command line.
-- `Ctrl+Q` exits bvim entirely.
+- `Ctrl+C` exits bvim entirely.
 - `:w` saves the current file.
 - `:w <name>` saves as another `.bvim` file in the current document directory.
 - `:e <name>` opens another `.bvim` file in the current document directory.
@@ -67,9 +71,11 @@ basic Emacs-style bindings such as `Alt+F`, `Alt+B`, `Ctrl+H`, `Ctrl+W`,
 
 ## Files
 
-Documents are JSON files with a `.bvim` suffix. Image blocks store uploaded
-images as data URLs inside the document, which keeps files portable but can make
-large image-heavy documents grow quickly.
+Documents are JSON files with a `.bvim` suffix. The file still stores an ordered
+`blocks` array for compatibility, but text entries are treated as document
+lines. Image embeds store uploaded images as data URLs inside the document,
+which keeps files portable but can make large image-heavy documents grow
+quickly.
 
 When launched from the CLI, the server restricts reads and writes to the opened
 document directory and the app's internal `documents/` directory.

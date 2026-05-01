@@ -2,11 +2,12 @@
 
 ## Product
 
-`bvim` is a CLI-launched local browser-based block editor with Vim-style
-command saving. It is not a terminal TUI. Keep the main workflow keyboard-first
-and preserve `bvim <file.bvim>`, `:w`, `:w <file>`, `:e <file>`, `:q`, `:q!`,
-`:wq`, and normal-mode `n` for the block picker.
-In text inputs and block editors, preserve `Ctrl+[` as escape, `Ctrl+M` as
+`bvim` is a CLI-launched local browser-based line editor with embedded image
+and LaTeX items plus Vim-style command saving. It is not a terminal TUI. Keep
+the main workflow keyboard-first and preserve `bvim <file.bvim>`, `:w`,
+`:w <file>`, `:e <file>`, `:q`, `:q!`, `:wq`, and normal-mode `n` for the
+insert picker.
+In text inputs and line/embed editors, preserve `Ctrl+[` as escape, `Ctrl+M` as
 enter, `Ctrl+I` as tab, and the local Emacs-style editing bindings.
 Keep close-tab shortcut suppression for `Ctrl+W`/`Meta+W` so browser defaults
 do not steal kill-word while the page has focus.
@@ -38,13 +39,13 @@ static help path.
 
 - Keep the app dense, quiet, and editor-like.
 - Keep the visible editor chrome minimal; do not reintroduce side rails or the
-  block metadata inspector unless the user explicitly asks for them.
+  metadata inspector unless the user explicitly asks for it.
 - Keep primary actions keyboard-driven and keep `?` as the shortcut reference
   overlay.
 - Keep the bvim app background transparent in both CSS and Electron. Visible UI
   surfaces should be translucent black or grayscale only.
 - Do not introduce colored UI accents. The palette is black, white, and gray.
-- Keep text, image, and LaTeX block behavior first-class.
+- Keep text-line editing and image/LaTeX embed behavior first-class.
 - Avoid turning the first screen into a landing page or documentation page.
 
 ## Dependencies

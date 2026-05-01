@@ -147,7 +147,7 @@ button {
   height: 100%;
   min-width: 0;
   overflow: auto;
-  padding: 22px clamp(14px, 6vw, 88px) 48px;
+  padding: 18px clamp(14px, 7vw, 96px) 48px;
   scrollbar-width: none;
 }
 
@@ -173,35 +173,36 @@ button {
 
 .block {
   position: relative;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
+  display: block;
   width: min(820px, 100%);
-  min-height: 48px;
-  margin: 0 auto 8px;
-  padding: 8px clamp(8px, 1.6vw, 12px) 8px 8px;
+  min-height: 22px;
+  margin: 0 auto;
+  padding: 1px 8px 1px 10px;
   border-left: 2px solid transparent;
-  background: rgba(0, 0, 0, 0.42);
+  background: transparent;
   box-shadow: none;
   transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .block:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .block.selected {
   border-color: var(--accent);
-  background: rgba(8, 8, 8, 0.78);
-  box-shadow: var(--shadow);
+  background: rgba(255, 255, 255, 0.055);
 }
 
-.block-number {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
-  text-align: right;
-  user-select: none;
+.block-image,
+.block-latex {
+  margin: 8px auto;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.block-image.selected,
+.block-latex.selected {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .block-body {
@@ -209,9 +210,11 @@ button {
 }
 
 .text-render {
-  min-height: 30px;
+  min-height: 20px;
   white-space: pre-wrap;
-  line-height: 1.5;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+  padding: 1px 0;
 }
 
 textarea {
@@ -233,9 +236,22 @@ textarea:focus {
   border-color: var(--accent);
 }
 
+.text-line-input {
+  min-height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.55;
+  padding: 1px 0;
+}
+
+.text-line-input:focus {
+  border-color: transparent;
+}
+
 .latex-render {
   overflow-x: auto;
-  padding: 6px 0;
+  padding: 4px 0;
   color: var(--ink);
 }
 
@@ -680,8 +696,6 @@ textarea:focus {
   }
 
   .block {
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 8px;
     padding-right: 8px;
   }
 
@@ -727,10 +741,13 @@ textarea:focus {
   }
 
   .block {
-    grid-template-columns: 22px minmax(0, 1fr);
-    gap: 7px;
-    margin-bottom: 7px;
-    padding: 7px 8px 7px 6px;
+    padding: 1px 8px 1px 6px;
+  }
+
+  .block-image,
+  .block-latex {
+    margin: 7px auto;
+    padding: 7px 8px;
   }
 
   .commandbar {
@@ -757,14 +774,6 @@ textarea:focus {
     min-width: 0;
   }
 
-  .block {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .block-number {
-    display: none;
-  }
-
   .text-render {
     line-height: 1.45;
   }
@@ -772,6 +781,11 @@ textarea:focus {
   textarea {
     min-height: 78px;
     padding: 7px;
+  }
+
+  .text-line-input {
+    min-height: 22px;
+    padding: 1px 0;
   }
 
   .setup-screen {
