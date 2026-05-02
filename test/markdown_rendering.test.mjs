@@ -37,10 +37,32 @@ test("line numbers follow source lines across markdown nodes", () => {
     })),
     [
       { type: "heading", line: 1, lineNumbers: undefined, itemLines: undefined },
+      { type: "blank", line: 2, lineNumbers: undefined, itemLines: undefined },
       { type: "paragraph", line: 3, lineNumbers: [3, 4], itemLines: undefined },
+      { type: "blank", line: 5, lineNumbers: undefined, itemLines: undefined },
       { type: "list", line: 6, lineNumbers: undefined, itemLines: [6] }
     ]
   );
+});
+
+test("blank source lines are numbered without adding a fake trailing row", () => {
+  assert.deepEqual(parseMarkdown("one\n\nthree\n"), [
+    {
+      type: "paragraph",
+      line: 1,
+      lineNumbers: [1],
+      lines: ["one"],
+      value: "one"
+    },
+    { type: "blank", line: 2 },
+    {
+      type: "paragraph",
+      line: 3,
+      lineNumbers: [3],
+      lines: ["three"],
+      value: "three"
+    }
+  ]);
 });
 
 test("heading index preserves nested heading levels", () => {
@@ -56,7 +78,7 @@ test("heading index preserves nested heading levels", () => {
 
 test("latex block tracks source range without preserving fence whitespace", () => {
   const nodes = parseMarkdown("before\n\n$$\na &= b\nc &= d\n$$\n");
-  assert.deepEqual(nodes[1], {
+  assert.deepEqual(nodes[2], {
     type: "latex",
     line: 3,
     lineNumbers: [3, 4, 5, 6],

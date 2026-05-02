@@ -15,8 +15,17 @@ function lineNumbers(startLine, count) {
   return Array.from({ length: Math.max(1, count) }, (_, index) => startLine + index);
 }
 
+function sourceLines(markdown) {
+  const normalized = String(markdown || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!normalized) {
+    return [];
+  }
+  const withoutFinalNewline = normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized;
+  return withoutFinalNewline.split("\n");
+}
+
 export function parseMarkdown(markdown) {
-  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const lines = sourceLines(markdown);
   const nodes = [];
   let index = 0;
 
@@ -26,6 +35,7 @@ export function parseMarkdown(markdown) {
     const sourceLine = index + 1;
 
     if (!trimmed) {
+      nodes.push({ type: "blank", line: sourceLine });
       index += 1;
       continue;
     }

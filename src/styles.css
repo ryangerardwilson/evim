@@ -269,6 +269,10 @@ button {
   min-height: 1.62em;
 }
 
+.blank-line-body {
+  min-height: 1.62em;
+}
+
 .quote-lines {
   margin: 0.85em 0;
 }

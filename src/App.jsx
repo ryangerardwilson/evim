@@ -481,6 +481,15 @@ function MarkdownDocument({ markdown, fileName }) {
             </NumberedLine>
           );
         }
+        if (node.type === "blank") {
+          return (
+            <NumberedLine key={index} line={node.line} className="blank-line">
+              <div className="blank-line-body" aria-hidden="true">
+                {" "}
+              </div>
+            </NumberedLine>
+          );
+        }
         if (node.type === "paragraph") {
           return (
             <div key={index} className="paragraph-lines">
