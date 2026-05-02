@@ -455,6 +455,11 @@ textarea:focus {
   overflow-x: auto;
   padding: 0;
   color: var(--ink);
+  scrollbar-width: none;
+}
+
+.latex-render::-webkit-scrollbar {
+  display: none;
 }
 
 .latex-render .katex-display {
