@@ -86,6 +86,20 @@ test("latex block tracks source range without preserving fence whitespace", () =
   });
 });
 
+test("bvim plot fences render as plot nodes across their source range", () => {
+  const nodes = parseMarkdown("```bvim-plot\nplot.func({ y: x => x * x })\n```\n");
+  assert.deepEqual(nodes, [
+    {
+      type: "plot",
+      line: 1,
+      lineNumbers: [1, 2, 3],
+      lines: ["plot.func({ y: x => x * x })"],
+      language: "bvim-plot",
+      value: "plot.func({ y: x => x * x })"
+    }
+  ]);
+});
+
 test("inline parsing keeps text newlines around inline markup", () => {
   assert.deepEqual(inlineParts("one\n`two`\n$three$"), [
     { type: "text", value: "one\n" },

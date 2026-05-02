@@ -51,7 +51,8 @@ static help path.
   black, matching the active terminal opacity. Visible UI surfaces should be
   translucent black or grayscale only.
 - Do not introduce colored UI accents. The palette is black, white, and gray.
-- Keep Markdown, image references, and LaTeX rendering first-class.
+- Keep Markdown, image references, LaTeX rendering, and `bvim-plot` fenced
+  plot rendering first-class.
 - Avoid turning the first screen into a landing page or documentation page.
 
 ## Dependencies

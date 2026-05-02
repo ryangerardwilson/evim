@@ -3,6 +3,7 @@ import katex from "katex";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
 import { leftAlignedLatexRows } from "./latex.js";
 import { headingIndexFromNodes, inlineParts, parseMarkdown } from "./markdown.js";
+import { plotFrameSource } from "./plotFrame.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -461,6 +462,43 @@ function LatexBlock({ value }) {
   return <div className="latex-render" dangerouslySetInnerHTML={{ __html: renderLatex(value, true) }} />;
 }
 
+function PlotBlock({ value }) {
+  const frameRef = useRef(null);
+  const id = useMemo(() => `plot-${Math.random().toString(36).slice(2)}`, []);
+  const [height, setHeight] = useState(320);
+  const srcDoc = useMemo(() => plotFrameSource(value, id), [id, value]);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.source !== frameRef.current?.contentWindow) {
+        return;
+      }
+      const data = event.data || {};
+      if (data.type !== "bvim-plot-height" || data.id !== id) {
+        return;
+      }
+      const nextHeight = Number(data.height);
+      if (Number.isFinite(nextHeight)) {
+        setHeight(Math.max(80, Math.min(1400, Math.ceil(nextHeight))));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [id]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      className="plot-frame"
+      title="bvim plot"
+      srcDoc={srcDoc}
+      sandbox="allow-scripts"
+      scrolling="no"
+      style={{ height }}
+    />
+  );
+}
+
 function MarkdownDocument({ markdown, fileName }) {
   const nodes = useMemo(() => parseMarkdown(markdown), [markdown]);
 
@@ -558,6 +596,13 @@ function MarkdownDocument({ markdown, fileName }) {
                 </NumberedLine>
               ))}
             </div>
+          );
+        }
+        if (node.type === "plot") {
+          return (
+            <NumberedBlock key={index} lineNumbers={node.lineNumbers} className="plot-line">
+              <PlotBlock value={node.value} />
+            </NumberedBlock>
           );
         }
         if (node.type === "latex") {

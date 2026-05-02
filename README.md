@@ -65,6 +65,26 @@ Markdown image references such as `![caption](./image.png)` are resolved
 relative to the Markdown file. Block LaTeX is rendered from `$$ ... $$`, and
 inline LaTeX is rendered from `$...$`.
 
+Equation plots can be embedded with JavaScript-backed `bvim-plot` code fences:
+
+````md
+```bvim-plot
+plot.func({
+  x: [-6, 6],
+  samples: 500,
+  y: {
+    "sin(x)": x => sin(x),
+    "0.2x^2 - 1": x => 0.2 * x * x - 1
+  },
+  title: "Equations"
+})
+```
+````
+
+The plot runtime is sandboxed and supports `plot.func`, `plot.points`,
+`plot.coords`, `plot.parametric`, `plot.linspace`, and direct `Math` helpers
+such as `sin`, `cos`, `PI`, and `sqrt`.
+
 While typing in setup or command fields, `Ctrl+M` acts as enter, `Ctrl+I` acts
 as tab, and basic Emacs-style bindings such as `Alt+F`, `Alt+B`, `Ctrl+H`,
 `Ctrl+W`, `Ctrl+A`, and `Ctrl+E` are handled by the editor.

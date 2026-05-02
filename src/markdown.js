@@ -15,6 +15,14 @@ function lineNumbers(startLine, count) {
   return Array.from({ length: Math.max(1, count) }, (_, index) => startLine + index);
 }
 
+function codeFenceKind(language) {
+  return String(language || "").trim().split(/\s+/)[0].toLowerCase();
+}
+
+function isPlotFence(language) {
+  return ["bvim-plot", "bvimplot", "plot"].includes(codeFenceKind(language));
+}
+
 function sourceLines(markdown) {
   const normalized = String(markdown || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!normalized) {
@@ -50,6 +58,17 @@ export function parseMarkdown(markdown) {
       }
       if (index < lines.length) {
         index += 1;
+      }
+      if (isPlotFence(language)) {
+        nodes.push({
+          type: "plot",
+          line: sourceLine,
+          lineNumbers: lineNumbers(sourceLine, index - sourceLine + 1),
+          lines: codeLines,
+          language,
+          value: codeLines.join("\n")
+        });
+        continue;
       }
       nodes.push({
         type: "code",

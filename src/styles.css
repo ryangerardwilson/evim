@@ -325,6 +325,19 @@ button {
   display: none;
 }
 
+.plot-line {
+  margin: 0.8em 0;
+}
+
+.plot-frame {
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  border: 0;
+  background: #000000;
+  overflow: hidden;
+}
+
 .markdown-doc pre {
   margin: 0;
   overflow: visible;
