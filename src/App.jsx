@@ -463,11 +463,33 @@ function LatexBlock({ value }) {
 }
 
 function PlotBlock({ value }) {
+  const shellRef = useRef(null);
   const frameRef = useRef(null);
   const id = useMemo(() => `plot-${Math.random().toString(36).slice(2)}`, []);
   const [result, setResult] = useState({ ok: false, error: "", plots: null });
+  const [plotWidth, setPlotWidth] = useState(820);
   const srcDoc = useMemo(() => plotFrameSource(value, id), [id, value]);
-  const rendered = useMemo(() => (result.plots ? renderPlotSvg(result.plots) : null), [result.plots]);
+  const rendered = useMemo(
+    () => (result.plots ? renderPlotSvg(result.plots, { width: plotWidth }) : null),
+    [plotWidth, result.plots]
+  );
+
+  useEffect(() => {
+    const node = shellRef.current;
+    if (!node) {
+      return undefined;
+    }
+    const updateWidth = () => {
+      const width = Math.floor(node.getBoundingClientRect().width);
+      if (width > 0) {
+        setPlotWidth(Math.max(300, Math.min(920, width)));
+      }
+    };
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     setResult({ ok: false, error: "", plots: null });
@@ -490,7 +512,7 @@ function PlotBlock({ value }) {
   }, [id, value]);
 
   return (
-    <div className="plot-shell">
+    <div className="plot-shell" ref={shellRef}>
       <iframe
         ref={frameRef}
         className="plot-runner-frame"

@@ -447,6 +447,31 @@ function safeStrokeWidth(value, fallback = 2.2) {
   return Math.max(1, Math.min(6, width));
 }
 
+function safePlotWidth(value) {
+  const width = Math.round(Number(value));
+  if (!Number.isFinite(width)) {
+    return 820;
+  }
+  return Math.max(300, Math.min(920, width));
+}
+
+function plotMetrics(width, seriesCount) {
+  const compact = width < 560;
+  const cramped = width < 420;
+  return {
+    titleFont: compact ? 13 : 12,
+    tickFont: compact ? 12 : 10,
+    legendFont: compact ? 13 : 12,
+    left: cramped ? 42 : compact ? 48 : 52,
+    right: compact ? 10 : 18,
+    top: compact ? 32 : 30,
+    gridHeight: cramped ? 220 : compact ? 238 : 230,
+    legendColumns: compact || seriesCount < 2 ? 1 : 2,
+    legendRowHeight: compact ? 28 : 24,
+    legendGap: compact ? 54 : 48
+  };
+}
+
 function pathFromPoints(points, xScale, yScale) {
   let path = "";
   let open = false;
@@ -479,19 +504,27 @@ function circlesFromPoints(points, xScale, yScale, color) {
     .join("");
 }
 
-function plotHeight(plot) {
+function plotHeight(plot, width) {
   const seriesCount = (plot.series || []).length;
-  const legendColumns = seriesCount > 1 ? 2 : 1;
-  const legendRows = Math.ceil(seriesCount / legendColumns);
-  return 292 + (seriesCount ? 28 + legendRows * 24 : 0);
+  const metrics = plotMetrics(width, seriesCount);
+  const legendRows = Math.ceil(seriesCount / metrics.legendColumns);
+  const titleHeight = plot.title ? 32 : 16;
+  const axisAndTicks = 36;
+  const legendHeight = seriesCount ? 26 + legendRows * metrics.legendRowHeight : 0;
+  return titleHeight + metrics.gridHeight + axisAndTicks + legendHeight;
 }
 
 function renderPlot(plot, offsetY, width, height) {
   const series = plot.series || [];
-  const legendColumns = series.length > 1 ? 2 : 1;
-  const legendRows = Math.ceil(series.length / legendColumns);
-  const legendHeight = series.length ? 28 + legendRows * 24 : 0;
-  const margin = { top: plot.title ? 30 : 14, right: 18, bottom: 34 + legendHeight, left: 52 };
+  const metrics = plotMetrics(width, series.length);
+  const legendRows = Math.ceil(series.length / metrics.legendColumns);
+  const legendHeight = series.length ? 26 + legendRows * metrics.legendRowHeight : 0;
+  const margin = {
+    top: plot.title ? metrics.top : 14,
+    right: metrics.right,
+    bottom: 34 + legendHeight,
+    left: metrics.left
+  };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const xDomain = domainFromPoints(series, 0);
@@ -501,7 +534,7 @@ function renderPlot(plot, offsetY, width, height) {
   const xTicks = ticks(xDomain[0], xDomain[1]);
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const title = plot.title
-    ? `<text x="${width / 2}" y="15" text-anchor="middle" fill="${PLOT_PALETTE.ink}" font-size="12">${escapeSvg(plot.title)}</text>`
+    ? `<text x="${width / 2}" y="16" text-anchor="middle" fill="${PLOT_PALETTE.ink}" font-size="${metrics.titleFont}">${escapeSvg(plot.title)}</text>`
     : "";
   const xAxis = yDomain[0] <= 0 && yDomain[1] >= 0 ? yScale(0) : margin.top + innerHeight;
   const yAxis = xDomain[0] <= 0 && xDomain[1] >= 0 ? xScale(0) : margin.left;
@@ -511,8 +544,8 @@ function renderPlot(plot, offsetY, width, height) {
   ].join("");
   const xTickY = margin.top + innerHeight + 21;
   const tickLabels = [
-    ...xTicks.map((value) => `<text x="${xScale(value).toFixed(2)}" y="${xTickY}" text-anchor="middle" fill="${PLOT_PALETTE.faint}" font-size="10">${escapeSvg(formatTick(value))}</text>`),
-    ...yTicks.map((value) => `<text x="${margin.left - 8}" y="${(yScale(value) + 3).toFixed(2)}" text-anchor="end" fill="${PLOT_PALETTE.faint}" font-size="10">${escapeSvg(formatTick(value))}</text>`)
+    ...xTicks.map((value) => `<text x="${xScale(value).toFixed(2)}" y="${xTickY}" text-anchor="middle" fill="${PLOT_PALETTE.faint}" font-size="${metrics.tickFont}">${escapeSvg(formatTick(value))}</text>`),
+    ...yTicks.map((value) => `<text x="${margin.left - 8}" y="${(yScale(value) + 4).toFixed(2)}" text-anchor="end" fill="${PLOT_PALETTE.faint}" font-size="${metrics.tickFont}">${escapeSvg(formatTick(value))}</text>`)
   ].join("");
   const paths = series
     .map((item, index) => {
@@ -525,25 +558,25 @@ function renderPlot(plot, offsetY, width, height) {
       return `<path d="${path}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />${circlesFromPoints(item.points, xScale, yScale, color)}`;
     })
     .join("");
-  const legendTop = margin.top + innerHeight + 48;
-  const legendColumnWidth = legendColumns === 2 ? 360 : innerWidth;
+  const legendTop = margin.top + innerHeight + metrics.legendGap;
+  const legendColumnWidth = metrics.legendColumns === 2 ? Math.max(220, (innerWidth - 28) / 2) : innerWidth;
   const legend = series
     .map((item, index) => {
-      const column = index % legendColumns;
-      const row = Math.floor(index / legendColumns);
+      const column = index % metrics.legendColumns;
+      const row = Math.floor(index / metrics.legendColumns);
       const x = margin.left + column * legendColumnWidth;
-      const y = legendTop + row * 24;
+      const y = legendTop + row * metrics.legendRowHeight;
       const color = safeColor(item.color, PLOT_PALETTE.strokes[index % PLOT_PALETTE.strokes.length]);
-      return `<g><line x1="${x}" y1="${y}" x2="${x + 26}" y2="${y}" stroke="${color}" stroke-width="3" stroke-linecap="round" /><text x="${x + 36}" y="${y + 4}" fill="${PLOT_PALETTE.ink}" font-size="12">${escapeSvg(item.label || "series")}</text></g>`;
+      return `<g><line x1="${x}" y1="${y}" x2="${x + 28}" y2="${y}" stroke="${color}" stroke-width="3.2" stroke-linecap="round" /><text x="${x + 38}" y="${y + 5}" fill="${PLOT_PALETTE.ink}" font-size="${metrics.legendFont}">${escapeSvg(item.label || "series")}</text></g>`;
     })
     .join("");
   return `<g transform="translate(0 ${offsetY})">${title}${grid}<line x1="${margin.left}" y1="${xAxis.toFixed(2)}" x2="${margin.left + innerWidth}" y2="${xAxis.toFixed(2)}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" /><line x1="${yAxis.toFixed(2)}" y1="${margin.top}" x2="${yAxis.toFixed(2)}" y2="${margin.top + innerHeight}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" />${tickLabels}${paths}${legend}</g>`;
 }
 
-export function renderPlotSvg(plots = []) {
-  const width = 820;
+export function renderPlotSvg(plots = [], options = {}) {
+  const width = safePlotWidth(options.width);
   const gap = 18;
-  const heights = plots.map(plotHeight);
+  const heights = plots.map((plot) => plotHeight(plot, width));
   let offset = 0;
   const groups = plots
     .map((plot, index) => {

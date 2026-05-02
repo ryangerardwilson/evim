@@ -33,3 +33,28 @@ test("plot renderer keeps the svg transparent and uses safe series colors", () =
   assert.doesNotMatch(html, /onload/);
   assert.doesNotMatch(html, /<rect/);
 });
+
+test("plot renderer uses the requested layout width for readable compact labels", () => {
+  const { html } = renderPlotSvg(
+    [
+      {
+        title: "Compact",
+        series: [
+          {
+            label: "x",
+            points: [
+              [0, 0],
+              [1, 1]
+            ]
+          }
+        ]
+      }
+    ],
+    { width: 380 }
+  );
+
+  assert.match(html, /viewBox="0 0 380 /);
+  assert.match(html, /font-size="13">Compact<\/text>/);
+  assert.match(html, /font-size="12">0<\/text>/);
+  assert.match(html, /font-size="13">x<\/text>/);
+});
