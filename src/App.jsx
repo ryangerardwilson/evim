@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import katex from "katex";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
 import { leftAlignedLatexRows } from "./latex.js";
-import { inlineParts, parseMarkdown } from "./markdown.js";
+import { headingIndexFromNodes, inlineParts, parseMarkdown } from "./markdown.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -17,7 +17,8 @@ const SHORTCUT_GROUPS = [
       ["?", "toggle shortcuts"],
       ["j / k", "smooth scroll down / up"],
       ["gg / G", "scroll top / bottom"],
-      ["i / enter", "open file in vim"],
+      ["i", "toggle heading index"],
+      ["enter", "open file in vim"],
       [":38", "open line 38 in vim"],
       ["r", "reload markdown"],
       [":", "command line"],
@@ -29,6 +30,7 @@ const SHORTCUT_GROUPS = [
     items: [
       [":e path", "open markdown path"],
       [":edit", "open current file in vim"],
+      [":index", "toggle heading index"],
       [":38", "open current file at line 38"],
       [":r", "reload current file"],
       [":lock", "request keyboard lock"]
@@ -579,6 +581,52 @@ function MarkdownDocument({ markdown, fileName }) {
   );
 }
 
+function DocumentIndexOverlay({
+  headings,
+  selectedIndex,
+  onSelect,
+  onChoose,
+  onClose,
+  refValue
+}) {
+  return (
+    <div className="modal-layer" role="presentation" onMouseDown={onClose}>
+      <section
+        ref={refValue}
+        className="document-index-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Document index"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="picker-title">index</div>
+        {headings.length ? (
+          <div className="document-index-list" role="listbox" aria-label="Headings">
+            {headings.map((heading, index) => (
+              <button
+                key={heading.id}
+                type="button"
+                className={cx("document-index-option", index === selectedIndex && "active")}
+                style={{ paddingLeft: `${8 + heading.depth * 14}px` }}
+                role="option"
+                aria-selected={index === selectedIndex}
+                onMouseEnter={() => onSelect(index)}
+                onClick={() => onChoose(index)}
+              >
+                <span className="index-line">{heading.line}</span>
+                <span className="index-title">{heading.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="document-index-empty">no headings</div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const [fileName, setFileName] = useState(START_FILE);
   const [title, setTitle] = useState("");
@@ -590,6 +638,8 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [closed, setClosed] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [headingIndexSelection, setHeadingIndexSelection] = useState(0);
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [recentDocuments, setRecentDocuments] = useState([]);
@@ -603,11 +653,14 @@ export default function App() {
   const commandRef = useRef(null);
   const documentRef = useRef(null);
   const editorRef = useRef(null);
+  const indexRef = useRef(null);
   const setupTitleRef = useRef(null);
   const setupPathRef = useRef(null);
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
   const pendingKeyRef = useRef("");
+  const parsedNodes = useMemo(() => parseMarkdown(markdown), [markdown]);
+  const headingIndex = useMemo(() => headingIndexFromNodes(parsedNodes), [parsedNodes]);
 
   const updateScrollProgress = useCallback(() => {
     const node = documentRef.current;
@@ -936,6 +989,44 @@ export default function App() {
     }
   }, [fileName]);
 
+  const jumpToHeading = useCallback(
+    (index = headingIndexSelection) => {
+      const heading = headingIndex[index];
+      const node = documentRef.current;
+      if (!heading || !node) {
+        setMessage("no headings");
+        return;
+      }
+      const target = node.querySelector(`[data-line="${heading.line}"]`);
+      if (!target) {
+        setMessage(`line ${heading.line}`);
+        return;
+      }
+      const top = target.offsetTop - Math.max(12, node.clientHeight * 0.18);
+      node.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      setIndexOpen(false);
+      setMessage(`heading ${heading.line}`);
+    },
+    [headingIndex, headingIndexSelection]
+  );
+
+  const toggleDocumentIndex = useCallback(() => {
+    setShortcutsOpen(false);
+    setIndexOpen((open) => {
+      const nextOpen = !open;
+      if (nextOpen) {
+        setHeadingIndexSelection((index) => {
+          if (!headingIndex.length) {
+            return 0;
+          }
+          return Math.min(index, headingIndex.length - 1);
+        });
+        setMessage(headingIndex.length ? "index" : "no headings");
+      }
+      return nextOpen;
+    });
+  }, [headingIndex.length]);
+
   const scrollDocumentBy = useCallback((direction) => {
     const node = documentRef.current;
     if (!node) {
@@ -969,8 +1060,14 @@ export default function App() {
           return;
         }
 
-        if (value === "edit" || value === "i") {
+        if (value === "edit") {
           await openExternalEditor();
+          setMode("normal");
+          return;
+        }
+
+        if (value === "index" || value === "i") {
+          toggleDocumentIndex();
           setMode("normal");
           return;
         }
@@ -1001,7 +1098,7 @@ export default function App() {
         setMode("normal");
       }
     },
-    [fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock]
+    [fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock, toggleDocumentIndex]
   );
 
   useEffect(() => {
@@ -1019,6 +1116,33 @@ export default function App() {
       shortcutsRef.current?.focus();
     }
   }, [shortcutsOpen]);
+
+  useEffect(() => {
+    if (indexOpen) {
+      indexRef.current?.focus();
+    }
+  }, [indexOpen]);
+
+  useEffect(() => {
+    if (!indexOpen) {
+      return;
+    }
+    setHeadingIndexSelection((index) => {
+      if (!headingIndex.length) {
+        return 0;
+      }
+      return Math.min(index, headingIndex.length - 1);
+    });
+  }, [headingIndex.length, indexOpen]);
+
+  useEffect(() => {
+    if (!indexOpen) {
+      return;
+    }
+    indexRef.current?.querySelector(".document-index-option.active")?.scrollIntoView({
+      block: "nearest"
+    });
+  }, [headingIndexSelection, indexOpen]);
 
   useEffect(() => {
     if (needsDocument && creatingDocument) {
@@ -1099,6 +1223,32 @@ export default function App() {
         if (isEscapeKey(event) || event.key === "?") {
           event.preventDefault();
           setShortcutsOpen(false);
+        }
+        return;
+      }
+
+      if (indexOpen) {
+        if (isEscapeKey(event) || event.key === "i") {
+          event.preventDefault();
+          setIndexOpen(false);
+          return;
+        }
+        if (event.key === "j" || event.key === "ArrowDown") {
+          event.preventDefault();
+          setHeadingIndexSelection((index) =>
+            headingIndex.length ? Math.min(headingIndex.length - 1, index + 1) : 0
+          );
+          return;
+        }
+        if (event.key === "k" || event.key === "ArrowUp") {
+          event.preventDefault();
+          setHeadingIndexSelection((index) => Math.max(0, index - 1));
+          return;
+        }
+        if (isEnterKey(event)) {
+          event.preventDefault();
+          jumpToHeading();
+          return;
         }
         return;
       }
@@ -1189,7 +1339,13 @@ export default function App() {
         return;
       }
 
-      if (event.key === "i" || isEnterKey(event)) {
+      if (event.key === "i") {
+        event.preventDefault();
+        toggleDocumentIndex();
+        return;
+      }
+
+      if (isEnterKey(event)) {
         event.preventDefault();
         openExternalEditor();
         return;
@@ -1206,6 +1362,9 @@ export default function App() {
   }, [
     closeEditor,
     creatingDocument,
+    headingIndex.length,
+    indexOpen,
+    jumpToHeading,
     mode,
     needsDocument,
     openExternalEditor,
@@ -1215,7 +1374,8 @@ export default function App() {
     reloadDocument,
     scrollDocumentBy,
     scrollDocumentTo,
-    shortcutsOpen
+    shortcutsOpen,
+    toggleDocumentIndex
   ]);
 
   if (closed) {
@@ -1356,6 +1516,16 @@ export default function App() {
       </div>
 
       {shortcutsOpen && <ShortcutsOverlay refValue={shortcutsRef} onClose={() => setShortcutsOpen(false)} />}
+      {indexOpen && (
+        <DocumentIndexOverlay
+          refValue={indexRef}
+          headings={headingIndex}
+          selectedIndex={headingIndexSelection}
+          onSelect={setHeadingIndexSelection}
+          onChoose={jumpToHeading}
+          onClose={() => setIndexOpen(false)}
+        />
+      )}
 
       <footer className={cx("commandbar", mode)}>
         <div className="mode">{mode.toUpperCase()}</div>

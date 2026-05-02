@@ -151,6 +151,26 @@ export function parseMarkdown(markdown) {
   return nodes;
 }
 
+export function headingIndexFromNodes(nodes) {
+  const stack = [];
+  return nodes
+    .filter((node) => node.type === "heading")
+    .map((node, index) => {
+      while (stack.length && stack[stack.length - 1] >= node.level) {
+        stack.pop();
+      }
+      const depth = stack.length;
+      stack.push(node.level);
+      return {
+        id: `${node.line}-${index}`,
+        line: node.line,
+        level: node.level,
+        depth,
+        title: node.value
+      };
+    });
+}
+
 export function inlineParts(value) {
   const parts = [];
   const source = String(value || "");

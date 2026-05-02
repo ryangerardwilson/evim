@@ -47,7 +47,9 @@ time.
 
 - `j` and `k` smooth-scroll the Markdown preview.
 - `gg` and `G` scroll to the top and bottom.
-- `i` or `Enter` opens the current file in Vim in a terminal.
+- `i` toggles the heading index. In the index, `j` and `k` move through
+  headings, and `Enter` jumps to the selected heading.
+- `Enter` opens the current file in Vim in a terminal.
 - `r` reloads the Markdown from disk.
 - `?` toggles the shortcut overlay.
 - `Esc` or `Ctrl+[` closes overlays or command mode.

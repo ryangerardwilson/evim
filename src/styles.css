@@ -637,6 +637,17 @@ textarea:focus {
   outline: none;
 }
 
+.document-index-panel {
+  width: min(360px, calc(100vw - 28px));
+  max-height: min(68vh, 520px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  outline: none;
+}
+
 .picker-title {
   padding: 9px 10px;
   border-bottom: 1px solid var(--line);
@@ -649,6 +660,58 @@ textarea:focus {
 .picker-options {
   display: grid;
   padding: 4px;
+}
+
+.document-index-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px;
+  scrollbar-width: none;
+}
+
+.document-index-list::-webkit-scrollbar {
+  display: none;
+}
+
+.document-index-option {
+  width: 100%;
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-index-option.active,
+.document-index-option:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.index-line {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.index-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-index-empty {
+  padding: 14px 10px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .picker-option {
@@ -1003,6 +1066,11 @@ textarea:focus {
   .shortcuts-panel {
     width: calc(100vw - 16px);
     max-height: calc(100vh - 16px);
+  }
+
+  .document-index-panel {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 48px);
   }
 }
 

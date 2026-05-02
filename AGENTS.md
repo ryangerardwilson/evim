@@ -4,8 +4,9 @@
 
 `bvim` is a CLI-launched local browser-based Markdown previewer with Vim-backed
 editing. It is not a terminal TUI. Keep the main workflow keyboard-first and
-preserve `bvim <file.md>`, `:e <file>`, `:edit`, `r`, and normal-mode
-`i`/`Enter` opening the current Markdown file in Vim. Preserve
+preserve `bvim <file.md>`, `:e <file>`, `:edit`, `r`, normal-mode `Enter`
+opening the current Markdown file in Vim, and normal-mode `i` toggling the
+heading index popup. Preserve
 numeric commands such as `:38` opening the current Markdown file in Vim at that
 line and centering it. Do not reintroduce `:q`, `:q!`, `:w`, `:wq`, or `:x`
 inside bvim; Vim handles persistence and `Ctrl+C` is the app-level exit.

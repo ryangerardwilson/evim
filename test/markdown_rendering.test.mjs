@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inlineParts, parseMarkdown } from "../src/markdown.js";
+import { headingIndexFromNodes, inlineParts, parseMarkdown } from "../src/markdown.js";
 
 test("plain vim lines stay as line-separated paragraph text", () => {
   assert.deepEqual(parseMarkdown("one\ntwo\nthree\n"), [
@@ -41,6 +41,17 @@ test("line numbers follow source lines across markdown nodes", () => {
       { type: "list", line: 6, lineNumbers: undefined, itemLines: [6] }
     ]
   );
+});
+
+test("heading index preserves nested heading levels", () => {
+  const nodes = parseMarkdown("# one\n\n### deep\n\n## two\n\n#### deeper\n\n# next\n");
+  assert.deepEqual(headingIndexFromNodes(nodes), [
+    { id: "1-0", line: 1, level: 1, depth: 0, title: "one" },
+    { id: "3-1", line: 3, level: 3, depth: 1, title: "deep" },
+    { id: "5-2", line: 5, level: 2, depth: 1, title: "two" },
+    { id: "7-3", line: 7, level: 4, depth: 2, title: "deeper" },
+    { id: "9-4", line: 9, level: 1, depth: 0, title: "next" }
+  ]);
 });
 
 test("latex block tracks source range without preserving fence whitespace", () => {
