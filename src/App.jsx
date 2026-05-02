@@ -3,7 +3,7 @@ import katex from "katex";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
 import { leftAlignedLatexRows } from "./latex.js";
 import { headingIndexFromNodes, inlineParts, parseMarkdown } from "./markdown.js";
-import { plotFrameSource } from "./plotFrame.js";
+import { plotFrameSource, renderPlotSvg } from "./plotFrame.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -465,37 +465,45 @@ function LatexBlock({ value }) {
 function PlotBlock({ value }) {
   const frameRef = useRef(null);
   const id = useMemo(() => `plot-${Math.random().toString(36).slice(2)}`, []);
-  const [height, setHeight] = useState(320);
+  const [result, setResult] = useState({ ok: false, error: "", plots: null });
   const srcDoc = useMemo(() => plotFrameSource(value, id), [id, value]);
+  const rendered = useMemo(() => (result.plots ? renderPlotSvg(result.plots) : null), [result.plots]);
 
   useEffect(() => {
+    setResult({ ok: false, error: "", plots: null });
     const onMessage = (event) => {
       if (event.source !== frameRef.current?.contentWindow) {
         return;
       }
       const data = event.data || {};
-      if (data.type !== "bvim-plot-height" || data.id !== id) {
+      if (data.type !== "bvim-plot-result" || data.id !== id) {
         return;
       }
-      const nextHeight = Number(data.height);
-      if (Number.isFinite(nextHeight)) {
-        setHeight(Math.max(80, Math.min(1400, Math.ceil(nextHeight))));
-      }
+      setResult({
+        ok: Boolean(data.ok),
+        error: data.ok ? "" : String(data.error || "render failed"),
+        plots: data.ok && Array.isArray(data.plots) ? data.plots : null
+      });
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [id]);
+  }, [id, value]);
 
   return (
-    <iframe
-      ref={frameRef}
-      className="plot-frame"
-      title="bvim plot"
-      srcDoc={srcDoc}
-      sandbox="allow-scripts"
-      scrolling="no"
-      style={{ height }}
-    />
+    <div className="plot-shell">
+      <iframe
+        ref={frameRef}
+        className="plot-runner-frame"
+        title="bvim plot runner"
+        srcDoc={srcDoc}
+        sandbox="allow-scripts"
+        scrolling="no"
+        allowtransparency="true"
+      />
+      {result.error && <div className="plot-error">plot error: {result.error}</div>}
+      {!result.error && !rendered && <div className="plot-pending">rendering plot</div>}
+      {rendered && <div className="plot-render" dangerouslySetInnerHTML={{ __html: rendered.html }} />}
+    </div>
   );
 }
 

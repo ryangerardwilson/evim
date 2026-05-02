@@ -72,10 +72,10 @@ Equation plots can be embedded with JavaScript-backed `bvim-plot` code fences:
 plot.func({
   x: [-6, 6],
   samples: 500,
-  y: {
-    "sin(x)": x => sin(x),
-    "0.2x^2 - 1": x => 0.2 * x * x - 1
-  },
+  series: [
+    { label: "sin(x)", y: x => sin(x), color: "cyan" },
+    { label: "0.2x^2 - 1", y: x => 0.2 * x * x - 1, color: "#facc15" }
+  ],
   title: "Equations"
 })
 ```
@@ -83,7 +83,10 @@ plot.func({
 
 The plot runtime is sandboxed and supports `plot.func`, `plot.points`,
 `plot.coords`, `plot.parametric`, `plot.linspace`, and direct `Math` helpers
-such as `sin`, `cos`, `PI`, and `sqrt`.
+such as `sin`, `cos`, `PI`, and `sqrt`. Series can set `color`, `stroke`, or
+`lineColor` with a safe named color, hex color, or `rgb(...)` value. Named
+colors include `white`, `gray`, `red`, `orange`, `yellow`, `green`, `cyan`,
+`blue`, `violet`, `purple`, and `pink`.
 
 While typing in setup or command fields, `Ctrl+M` acts as enter, `Ctrl+I` acts
 as tab, and basic Emacs-style bindings such as `Alt+F`, `Alt+B`, `Ctrl+H`,

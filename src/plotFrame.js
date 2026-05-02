@@ -16,6 +16,12 @@ const RESERVED_KEYS = new Set([
   "title",
   "label",
   "name",
+  "color",
+  "stroke",
+  "lineColor",
+  "strokeWidth",
+  "lineWidth",
+  "width",
   "xLabel",
   "yLabel",
   "y",
@@ -97,33 +103,55 @@ function sampleFunction(fn, domain, samples) {
   return points;
 }
 
-function seriesFromValue(label, value, domain, samples) {
+function seriesStyle(source) {
+  if (!source || typeof source !== "object") {
+    return {};
+  }
+  const color = source.color ?? source.stroke ?? source.lineColor;
+  const strokeWidth = source.strokeWidth ?? source.lineWidth ?? source.width;
+  return {
+    ...(color === undefined ? {} : { color: String(color) }),
+    ...(strokeWidth === undefined ? {} : { strokeWidth })
+  };
+}
+
+function withSeriesStyle(series, source) {
+  return { ...series, ...seriesStyle(source) };
+}
+
+function seriesFromValue(label, value, domain, samples, styleSource = null) {
   if (typeof value === "function") {
-    return { label, points: sampleFunction(value, domain, samples) };
+    return withSeriesStyle({ label, points: sampleFunction(value, domain, samples) }, styleSource);
   }
 
   if (typeof value === "number") {
-    return {
-      label,
-      points: Array.from({ length: samples }, (_, index) => pointFrom(generatedX(domain, samples, index), value))
-    };
+    return withSeriesStyle(
+      {
+        label,
+        points: Array.from({ length: samples }, (_, index) => pointFrom(generatedX(domain, samples, index), value))
+      },
+      styleSource
+    );
   }
 
   if (Array.isArray(value)) {
     const pairLike = value.every((item) => Array.isArray(item) && item.length >= 2);
     if (pairLike) {
-      return { label, points: normalizePointPairs(value) };
+      return withSeriesStyle({ label, points: normalizePointPairs(value) }, styleSource);
     }
-    return {
-      label,
-      points: value.map((y, index) => pointFrom(generatedX(domain, value.length || samples, index), y))
-    };
+    return withSeriesStyle(
+      {
+        label,
+        points: value.map((y, index) => pointFrom(generatedX(domain, value.length || samples, index), y))
+      },
+      styleSource
+    );
   }
 
   if (value && typeof value === "object") {
     const nextLabel = value.label || value.name || label;
     const y = value.y ?? value.fn ?? value.f ?? value.values ?? value.points;
-    return seriesFromValue(String(nextLabel || label), y, domain, samples);
+    return seriesFromValue(String(nextLabel || label), y, domain, samples, value);
   }
 
   fail("series must be a function, number, y-value array, point array, or object");
@@ -145,15 +173,15 @@ function normalizeSeries(input, config, domain, samples) {
   }
 
   if (typeof input === "function" || typeof input === "number") {
-    return [seriesFromValue(config.label || config.name || "f(x)", input, domain, samples)];
+    return [seriesFromValue(config.label || config.name || "f(x)", input, domain, samples, config)];
   }
 
   if (Array.isArray(input)) {
     const seriesList = input.every((item) => item && typeof item === "object" && !Array.isArray(item));
     if (seriesList) {
-      return input.map((item, index) => seriesFromValue(item.label || item.name || "series " + (index + 1), item, domain, samples));
+      return input.map((item, index) => seriesFromValue(item.label || item.name || "series " + (index + 1), item, domain, samples, item));
     }
-    return [seriesFromValue(config.label || config.name || "series", input, domain, samples)];
+    return [seriesFromValue(config.label || config.name || "series", input, domain, samples, config)];
   }
 
   if (input && typeof input === "object") {
@@ -194,7 +222,8 @@ function createPlotApi(plots) {
         series: [
           {
             label: String(config.label || config.name || "points"),
-            points: normalizePointPairs(config.points || [])
+            points: normalizePointPairs(config.points || []),
+            ...seriesStyle(config)
           }
         ]
       });
@@ -227,7 +256,8 @@ function createPlotApi(plots) {
         series: [
           {
             label: String(config.label || config.name || "parametric"),
-            points
+            points,
+            ...seriesStyle(config)
           }
         ]
       });
@@ -262,8 +292,41 @@ self.onmessage = (event) => {
 `;
 
 const IFRAME_RUNTIME = String.raw`
-const mount = document.getElementById("mount");
-const palette = {
+function postResult(payload) {
+  parent.postMessage({ type: "bvim-plot-result", id: BLOCK_ID, ...payload }, "*");
+}
+
+try {
+  const workerUrl = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
+  const worker = new Worker(workerUrl);
+  const timeout = window.setTimeout(() => {
+    worker.terminate();
+    URL.revokeObjectURL(workerUrl);
+    postResult({ ok: false, error: "plot timed out" });
+  }, 1600);
+  worker.onmessage = (event) => {
+    window.clearTimeout(timeout);
+    worker.terminate();
+    URL.revokeObjectURL(workerUrl);
+    if (event.data?.ok) {
+      postResult({ ok: true, plots: event.data.plots || [] });
+    } else {
+      postResult({ ok: false, error: event.data?.error || "render failed" });
+    }
+  };
+  worker.onerror = (event) => {
+    window.clearTimeout(timeout);
+    worker.terminate();
+    URL.revokeObjectURL(workerUrl);
+    postResult({ ok: false, error: event.message || "worker failed" });
+  };
+  worker.postMessage({ source: USER_SOURCE });
+} catch (error) {
+  postResult({ ok: false, error: error?.message || String(error) });
+}
+`;
+
+const PLOT_PALETTE = {
   ink: "#f2f2f2",
   muted: "#a6a6a6",
   faint: "#707070",
@@ -272,7 +335,22 @@ const palette = {
   strokes: ["#ffffff", "#d6d6d6", "#ababab", "#828282", "#eeeeee", "#bfbfbf"]
 };
 
-function escapeHtml(value) {
+const NAMED_COLORS = {
+  white: "#ffffff",
+  gray: "#a3a3a3",
+  grey: "#a3a3a3",
+  red: "#f87171",
+  orange: "#fb923c",
+  yellow: "#facc15",
+  green: "#4ade80",
+  cyan: "#22d3ee",
+  blue: "#60a5fa",
+  violet: "#a78bfa",
+  purple: "#c084fc",
+  pink: "#f472b6"
+};
+
+function escapeSvg(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -337,6 +415,38 @@ function formatTick(value) {
   return String(Number(value.toFixed(3)));
 }
 
+function safeColor(value, fallback) {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const color = value.trim();
+  const lower = color.toLowerCase();
+  if (NAMED_COLORS[lower]) {
+    return NAMED_COLORS[lower];
+  }
+  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(color)) {
+    return color;
+  }
+  const rgb = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(0|1|0?\.\d+))?\s*\)$/i);
+  if (rgb) {
+    const channels = rgb.slice(1, 4).map((part) => Math.max(0, Math.min(255, Number(part))));
+    if (rgb[4] !== undefined) {
+      const alpha = Math.max(0, Math.min(1, Number(rgb[4])));
+      return `rgba(${channels.join(", ")}, ${alpha})`;
+    }
+    return `rgb(${channels.join(", ")})`;
+  }
+  return fallback;
+}
+
+function safeStrokeWidth(value, fallback = 2.2) {
+  const width = Number(value);
+  if (!Number.isFinite(width)) {
+    return fallback;
+  }
+  return Math.max(1, Math.min(6, width));
+}
+
 function pathFromPoints(points, xScale, yScale) {
   let path = "";
   let open = false;
@@ -347,7 +457,7 @@ function pathFromPoints(points, xScale, yScale) {
       open = false;
       continue;
     }
-    path += (open ? "L" : "M") + xScale(x).toFixed(2) + " " + yScale(y).toFixed(2) + " ";
+    path += `${open ? "L" : "M"}${xScale(x).toFixed(2)} ${yScale(y).toFixed(2)} `;
     open = true;
   }
   return path.trim();
@@ -364,112 +474,90 @@ function circlesFromPoints(points, xScale, yScale, color) {
       if (x === null || y === null) {
         return "";
       }
-      return '<circle cx="' + xScale(x).toFixed(2) + '" cy="' + yScale(y).toFixed(2) + '" r="2.4" fill="' + color + '" />';
+      return `<circle cx="${xScale(x).toFixed(2)}" cy="${yScale(y).toFixed(2)}" r="2.4" fill="${color}" />`;
     })
     .join("");
 }
 
+function plotHeight(plot) {
+  const seriesCount = (plot.series || []).length;
+  const legendColumns = seriesCount > 1 ? 2 : 1;
+  const legendRows = Math.ceil(seriesCount / legendColumns);
+  return 292 + (seriesCount ? 28 + legendRows * 24 : 0);
+}
+
 function renderPlot(plot, offsetY, width, height) {
-  const margin = { top: plot.title ? 32 : 18, right: 18, bottom: 38, left: 52 };
+  const series = plot.series || [];
+  const legendColumns = series.length > 1 ? 2 : 1;
+  const legendRows = Math.ceil(series.length / legendColumns);
+  const legendHeight = series.length ? 28 + legendRows * 24 : 0;
+  const margin = { top: plot.title ? 30 : 14, right: 18, bottom: 34 + legendHeight, left: 52 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
-  const xDomain = domainFromPoints(plot.series || [], 0);
-  const yDomain = domainFromPoints(plot.series || [], 1);
+  const xDomain = domainFromPoints(series, 0);
+  const yDomain = domainFromPoints(series, 1);
   const xScale = (value) => margin.left + ((value - xDomain[0]) / (xDomain[1] - xDomain[0])) * innerWidth;
   const yScale = (value) => margin.top + innerHeight - ((value - yDomain[0]) / (yDomain[1] - yDomain[0])) * innerHeight;
   const xTicks = ticks(xDomain[0], xDomain[1]);
   const yTicks = ticks(yDomain[0], yDomain[1]);
   const title = plot.title
-    ? '<text x="' + width / 2 + '" y="15" text-anchor="middle" fill="' + palette.ink + '" font-size="12">' + escapeHtml(plot.title) + '</text>'
+    ? `<text x="${width / 2}" y="15" text-anchor="middle" fill="${PLOT_PALETTE.ink}" font-size="12">${escapeSvg(plot.title)}</text>`
     : "";
   const xAxis = yDomain[0] <= 0 && yDomain[1] >= 0 ? yScale(0) : margin.top + innerHeight;
   const yAxis = xDomain[0] <= 0 && xDomain[1] >= 0 ? xScale(0) : margin.left;
   const grid = [
-    ...xTicks.map((value) => '<line x1="' + xScale(value).toFixed(2) + '" y1="' + margin.top + '" x2="' + xScale(value).toFixed(2) + '" y2="' + (margin.top + innerHeight) + '" stroke="' + palette.grid + '" stroke-width="1" />'),
-    ...yTicks.map((value) => '<line x1="' + margin.left + '" y1="' + yScale(value).toFixed(2) + '" x2="' + (margin.left + innerWidth) + '" y2="' + yScale(value).toFixed(2) + '" stroke="' + palette.grid + '" stroke-width="1" />')
+    ...xTicks.map((value) => `<line x1="${xScale(value).toFixed(2)}" y1="${margin.top}" x2="${xScale(value).toFixed(2)}" y2="${margin.top + innerHeight}" stroke="${PLOT_PALETTE.grid}" stroke-width="1" />`),
+    ...yTicks.map((value) => `<line x1="${margin.left}" y1="${yScale(value).toFixed(2)}" x2="${margin.left + innerWidth}" y2="${yScale(value).toFixed(2)}" stroke="${PLOT_PALETTE.grid}" stroke-width="1" />`)
   ].join("");
+  const xTickY = margin.top + innerHeight + 21;
   const tickLabels = [
-    ...xTicks.map((value) => '<text x="' + xScale(value).toFixed(2) + '" y="' + (height - 17) + '" text-anchor="middle" fill="' + palette.faint + '" font-size="10">' + escapeHtml(formatTick(value)) + '</text>'),
-    ...yTicks.map((value) => '<text x="' + (margin.left - 8) + '" y="' + (yScale(value) + 3).toFixed(2) + '" text-anchor="end" fill="' + palette.faint + '" font-size="10">' + escapeHtml(formatTick(value)) + '</text>')
+    ...xTicks.map((value) => `<text x="${xScale(value).toFixed(2)}" y="${xTickY}" text-anchor="middle" fill="${PLOT_PALETTE.faint}" font-size="10">${escapeSvg(formatTick(value))}</text>`),
+    ...yTicks.map((value) => `<text x="${margin.left - 8}" y="${(yScale(value) + 3).toFixed(2)}" text-anchor="end" fill="${PLOT_PALETTE.faint}" font-size="10">${escapeSvg(formatTick(value))}</text>`)
   ].join("");
-  const paths = (plot.series || [])
-    .map((series, index) => {
-      const color = palette.strokes[index % palette.strokes.length];
-      const path = pathFromPoints(series.points, xScale, yScale);
+  const paths = series
+    .map((item, index) => {
+      const color = safeColor(item.color, PLOT_PALETTE.strokes[index % PLOT_PALETTE.strokes.length]);
+      const strokeWidth = safeStrokeWidth(item.strokeWidth);
+      const path = pathFromPoints(item.points, xScale, yScale);
       if (!path) {
         return "";
       }
-      return '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />' + circlesFromPoints(series.points, xScale, yScale, color);
+      return `<path d="${path}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />${circlesFromPoints(item.points, xScale, yScale, color)}`;
     })
     .join("");
-  const legend = (plot.series || [])
-    .slice(0, 6)
-    .map((series, index) => {
-      const x = margin.left + index * 118;
-      const y = height - 4;
-      const color = palette.strokes[index % palette.strokes.length];
-      return '<g><line x1="' + x + '" y1="' + (y - 4) + '" x2="' + (x + 14) + '" y2="' + (y - 4) + '" stroke="' + color + '" stroke-width="2" /><text x="' + (x + 19) + '" y="' + y + '" fill="' + palette.muted + '" font-size="10">' + escapeHtml(series.label || "series") + '</text></g>';
+  const legendTop = margin.top + innerHeight + 48;
+  const legendColumnWidth = legendColumns === 2 ? 360 : innerWidth;
+  const legend = series
+    .map((item, index) => {
+      const column = index % legendColumns;
+      const row = Math.floor(index / legendColumns);
+      const x = margin.left + column * legendColumnWidth;
+      const y = legendTop + row * 24;
+      const color = safeColor(item.color, PLOT_PALETTE.strokes[index % PLOT_PALETTE.strokes.length]);
+      return `<g><line x1="${x}" y1="${y}" x2="${x + 26}" y2="${y}" stroke="${color}" stroke-width="3" stroke-linecap="round" /><text x="${x + 36}" y="${y + 4}" fill="${PLOT_PALETTE.ink}" font-size="12">${escapeSvg(item.label || "series")}</text></g>`;
     })
     .join("");
-  return '<g transform="translate(0 ' + offsetY + ')">' + title + grid + '<line x1="' + margin.left + '" y1="' + xAxis.toFixed(2) + '" x2="' + (margin.left + innerWidth) + '" y2="' + xAxis.toFixed(2) + '" stroke="' + palette.axis + '" stroke-width="1.2" /><line x1="' + yAxis.toFixed(2) + '" y1="' + margin.top + '" x2="' + yAxis.toFixed(2) + '" y2="' + (margin.top + innerHeight) + '" stroke="' + palette.axis + '" stroke-width="1.2" />' + tickLabels + paths + legend + '</g>';
+  return `<g transform="translate(0 ${offsetY})">${title}${grid}<line x1="${margin.left}" y1="${xAxis.toFixed(2)}" x2="${margin.left + innerWidth}" y2="${xAxis.toFixed(2)}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" /><line x1="${yAxis.toFixed(2)}" y1="${margin.top}" x2="${yAxis.toFixed(2)}" y2="${margin.top + innerHeight}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" />${tickLabels}${paths}${legend}</g>`;
 }
 
-function renderPlots(plots) {
+export function renderPlotSvg(plots = []) {
   const width = 820;
-  const plotHeight = 300;
   const gap = 18;
-  const totalHeight = plots.length * plotHeight + Math.max(0, plots.length - 1) * gap;
-  const groups = plots.map((plot, index) => renderPlot(plot, index * (plotHeight + gap), width, plotHeight)).join("");
+  const heights = plots.map(plotHeight);
+  let offset = 0;
+  const groups = plots
+    .map((plot, index) => {
+      const rendered = renderPlot(plot, offset, width, heights[index]);
+      offset += heights[index] + gap;
+      return rendered;
+    })
+    .join("");
+  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + Math.max(0, plots.length - 1) * gap;
   return {
     height: totalHeight,
-    html: '<svg class="plot-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + ' ' + totalHeight + '" role="img">' + groups + '</svg>'
+    html: `<svg class="plot-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${totalHeight}" role="img">${groups}</svg>`
   };
 }
-
-function postHeight(height) {
-  parent.postMessage({ type: "bvim-plot-height", id: BLOCK_ID, height }, "*");
-}
-
-function renderError(message) {
-  mount.innerHTML = '<div class="plot-error">plot error: ' + escapeHtml(message) + '</div>';
-  requestAnimationFrame(() => postHeight(Math.max(54, document.body.scrollHeight)));
-}
-
-function renderOk(plots) {
-  const rendered = renderPlots(plots);
-  mount.innerHTML = rendered.html;
-  requestAnimationFrame(() => postHeight(Math.max(120, rendered.height)));
-}
-
-try {
-  const workerUrl = URL.createObjectURL(new Blob([WORKER_SOURCE], { type: "text/javascript" }));
-  const worker = new Worker(workerUrl);
-  const timeout = window.setTimeout(() => {
-    worker.terminate();
-    URL.revokeObjectURL(workerUrl);
-    renderError("plot timed out");
-  }, 1600);
-  worker.onmessage = (event) => {
-    window.clearTimeout(timeout);
-    worker.terminate();
-    URL.revokeObjectURL(workerUrl);
-    if (event.data?.ok) {
-      renderOk(event.data.plots || []);
-    } else {
-      renderError(event.data?.error || "render failed");
-    }
-  };
-  worker.onerror = (event) => {
-    window.clearTimeout(timeout);
-    worker.terminate();
-    URL.revokeObjectURL(workerUrl);
-    renderError(event.message || "worker failed");
-  };
-  worker.postMessage({ source: USER_SOURCE });
-} catch (error) {
-  renderError(error?.message || String(error));
-}
-`;
 
 export function plotFrameSource(source, id) {
   return `<!doctype html>
@@ -483,7 +571,7 @@ export function plotFrameSource(source, id) {
         margin: 0;
         padding: 0;
         overflow: hidden;
-        background: #000000;
+        background: transparent;
         color: #f2f2f2;
         font: 12px "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
       }
@@ -497,20 +585,11 @@ export function plotFrameSource(source, id) {
         width: 100%;
         height: auto;
         overflow: visible;
-      }
-
-      .plot-error {
-        padding: 10px 12px;
-        border-left: 2px solid rgba(255, 255, 255, 0.32);
-        background: rgba(0, 0, 0, 0.32);
-        color: #d8d8d8;
-        line-height: 1.5;
-        white-space: pre-wrap;
+        background: transparent;
       }
     </style>
   </head>
   <body>
-    <div id="mount"></div>
     <script>
       const BLOCK_ID = ${scriptJson(id)};
       const USER_SOURCE = ${scriptJson(source)};

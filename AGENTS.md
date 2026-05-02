@@ -50,7 +50,9 @@ static help path.
 - Keep the Electron window transparent and the page background translucent
   black, matching the active terminal opacity. Visible UI surfaces should be
   translucent black or grayscale only.
-- Do not introduce colored UI accents. The palette is black, white, and gray.
+- Do not introduce colored UI accents. The app chrome palette is black, white,
+  and gray. User-authored plot series may opt into line colors as document
+  content.
 - Keep Markdown, image references, LaTeX rendering, and `bvim-plot` fenced
   plot rendering first-class.
 - Avoid turning the first screen into a landing page or documentation page.
