@@ -7,7 +7,7 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --bg: transparent;
+  --bg: rgba(0, 0, 0, 0.8);
   --panel: rgba(0, 0, 0, 0.46);
   --panel-raised: rgba(8, 8, 8, 0.78);
   --panel-solid: rgba(2, 2, 2, 0.92);
@@ -40,7 +40,7 @@ body {
   min-width: 320px;
   overflow: hidden;
   font-size: 12px;
-  background: transparent;
+  background: var(--bg);
 }
 
 button,
