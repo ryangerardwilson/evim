@@ -224,30 +224,16 @@ button {
 .markdown-doc h4,
 .markdown-doc h5,
 .markdown-doc h6 {
-  margin: 1.1em 0 0.45em;
+  margin: 0.55em 0 0.2em;
   color: var(--ink);
-  font-weight: 760;
-  line-height: 1.18;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.62;
   letter-spacing: 0;
 }
 
 .markdown-doc h1 {
   margin-top: 0;
-  font-size: 22px;
-}
-
-.markdown-doc h2 {
-  font-size: 18px;
-}
-
-.markdown-doc h3 {
-  font-size: 15px;
-}
-
-.markdown-doc h4,
-.markdown-doc h5,
-.markdown-doc h6 {
-  font-size: 13px;
 }
 
 .markdown-doc p,
