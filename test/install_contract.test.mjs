@@ -32,3 +32,8 @@ test("installer checks installed version with bvim -v", async () => {
   const source = await fs.readFile(installScript, "utf8");
   assert.match(source, /\$LAUNCHER" -v/);
 });
+
+test("installer installs electron for the desktop runtime", async () => {
+  const source = await fs.readFile(installScript, "utf8");
+  assert.match(source, /npm install --omit=dev --no-save electron@\^41\.3\.0/);
+});

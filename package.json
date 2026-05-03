@@ -28,12 +28,14 @@
   "dependencies": {
     "@ryangerardwilson/bvim-markdown": "file:packages/bvim-markdown",
     "@vitejs/plugin-react": "^5.1.2",
-    "electron": "^41.3.0",
     "express": "^5.2.1",
     "katex": "^0.16.25",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "vite": "^7.3.0"
+  },
+  "devDependencies": {
+    "electron": "^41.3.0"
   }
 }
