@@ -15,7 +15,7 @@ need gh
 need npm
 need node
 
-[ -d .git ] || die "run from the bvim git repository root"
+[ -d .git ] || die "run from the evim git repository root"
 [ -f package.json ] || die "package.json not found"
 [ -f install.sh ] || die "install.sh not found"
 
@@ -75,7 +75,7 @@ git push origin "v$next_version"
 if ! gh release view "v$next_version" >/dev/null 2>&1; then
   gh release create "v$next_version" \
     --title "v$next_version" \
-    --notes "bvim v$next_version"
+    --notes "evim v$next_version"
 fi
 
 for _ in $(seq 1 60); do

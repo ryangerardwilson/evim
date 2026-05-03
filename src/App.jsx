@@ -7,7 +7,7 @@ import {
   parseMarkdown,
   plotFrameSource,
   renderPlotSvg
-} from "@ryangerardwilson/bvim-markdown";
+} from "@ryangerardwilson/evim-markdown";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
 
 function initialFileName() {
@@ -29,7 +29,7 @@ const SHORTCUT_GROUPS = [
       [":38", "open line 38 in vim"],
       ["r", "reload markdown"],
       [":", "command line"],
-      ["ctrl+c", "quit bvim"]
+      ["ctrl+c", "quit evim"]
     ]
   },
   {
@@ -527,7 +527,7 @@ function PlotBlock({ value }) {
         return;
       }
       const data = event.data || {};
-      if (data.type !== "bvim-plot-result" || data.id !== id) {
+      if (data.type !== "evim-plot-result" || data.id !== id) {
         return;
       }
       setResult({
@@ -545,7 +545,7 @@ function PlotBlock({ value }) {
       <iframe
         ref={frameRef}
         className="plot-runner-frame"
-        title="bvim plot runner"
+        title="evim plot runner"
         srcDoc={srcDoc}
         sandbox="allow-scripts"
         scrolling="no"
@@ -1116,7 +1116,7 @@ export default function App() {
     setClosed(true);
     setMode("normal");
     setMessage("closed");
-    window.bvimDesktop?.quit?.();
+    window.evimDesktop?.quit?.();
     window.setTimeout(() => window.close(), 0);
   }, []);
 
@@ -1349,7 +1349,7 @@ export default function App() {
   }, [creatingDocument, needsDocument, openingDocument]);
 
   useEffect(() => {
-    const unsubscribe = window.bvimDesktop?.onControlKey?.((key) => {
+    const unsubscribe = window.evimDesktop?.onControlKey?.((key) => {
       const target = document.activeElement;
       if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
         return;
@@ -1597,7 +1597,7 @@ export default function App() {
     return (
       <main className="closed-screen">
         <div>
-          <p className="eyebrow">bvim</p>
+          <p className="eyebrow">evim</p>
           <h1>{fileName}</h1>
           <p>{message}</p>
         </div>
@@ -1655,7 +1655,7 @@ export default function App() {
         >
           <div className="brand setup-brand">
             <span className="brand-mark">b</span>
-            <span>bvim</span>
+            <span>evim</span>
           </div>
 
           {showRecentDocuments && (

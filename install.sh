@@ -2,16 +2,16 @@
 set -euo pipefail
 
 OWNER="ryangerardwilson"
-REPO="bvim"
-APP_NAME="bvim"
-INSTALL_ROOT="${BVIM_INSTALL_ROOT:-$HOME/.bvim}"
+REPO="evim"
+APP_NAME="evim"
+INSTALL_ROOT="${EVIM_INSTALL_ROOT:-$HOME/.evim}"
 APP_DIR="$INSTALL_ROOT/app"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/$APP_NAME"
 
 usage() {
   cat <<'EOF'
-bvim installer
+evim installer
 
 flags:
   install.sh -h
@@ -71,9 +71,9 @@ install_from_archive() {
   rm -rf "$APP_DIR"
   mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
   cp -R "$source_dir" "$APP_DIR"
-  chmod +x "$APP_DIR/bvim" "$APP_DIR/bin/bvim.mjs"
+  chmod +x "$APP_DIR/evim" "$APP_DIR/bin/evim.mjs"
   (cd "$APP_DIR" && npm install --omit=dev && npm install --no-save electron@^41.3.0)
-  ln -sfn "$APP_DIR/bvim" "$LAUNCHER"
+  ln -sfn "$APP_DIR/evim" "$LAUNCHER"
 
   if ! printf '%s' ":$PATH:" | grep -q ":$BIN_DIR:"; then
     printf 'Add this to ~/.bashrc if needed:\n'
@@ -81,7 +81,7 @@ install_from_archive() {
   fi
 
   "$LAUNCHER" -v >/dev/null
-  printf 'installed bvim %s\n' "$("$LAUNCHER" -v)"
+  printf 'installed evim %s\n' "$("$LAUNCHER" -v)"
   rm -rf "$tmp_dir"
 }
 
@@ -105,7 +105,7 @@ upgrade_latest() {
     installed="$("$LAUNCHER" -v 2>/dev/null || true)"
   fi
   if [ "$installed" = "$latest" ]; then
-    printf 'bvim %s already installed\n' "$installed"
+    printf 'evim %s already installed\n' "$installed"
     return 0
   fi
   install_version "$latest"

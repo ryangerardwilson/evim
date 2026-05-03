@@ -1,6 +1,6 @@
-# bvim
+# evim
 
-`bvim` is a CLI-launched Markdown previewer for local `.md` files. It opens a
+`evim` is a CLI-launched Markdown previewer for local `.md` files. It opens a
 small local desktop browser shell, renders Markdown with images and LaTeX, and
 outsources editing to Vim in a terminal.
 
@@ -9,14 +9,14 @@ outsources editing to Vim in a terminal.
 From a published GitHub release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/bvim/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ryangerardwilson/evim/main/install.sh | bash
 ```
 
 From a source checkout:
 
 ```bash
 npm install
-ln -sfn "$PWD/bvim" "$HOME/.local/bin/bvim"
+ln -sfn "$PWD/evim" "$HOME/.local/bin/evim"
 ```
 
 Make sure `~/.local/bin` is on your `PATH`.
@@ -24,26 +24,26 @@ Make sure `~/.local/bin` is on your `PATH`.
 ## CLI
 
 ```bash
-bvim
-bvim notes.md
-bvim ~/Documents/notes.md
-bvim -h
-bvim -v
-bvim -u
+evim
+evim notes.md
+evim ~/Documents/notes.md
+evim -h
+evim -v
+evim -u
 ```
 
-Running `bvim` with no file shows recent `.md` files, an option to create a
+Running `evim` with no file shows recent `.md` files, an option to create a
 named Markdown document, and an option to open an existing `.md` file by path.
 There is no untitled scratch document.
 
 In that flow, the document name is the filename. A path without a `.md` suffix
-is treated as a directory, so `hello.md` plus `~/Documents/bvim` creates
-`~/Documents/bvim/hello.md`.
+is treated as a directory, so `hello.md` plus `~/Documents/evim` creates
+`~/Documents/evim/hello.md`.
 
 In the recent-file screen, `n` starts the new-document flow and `o` opens the
 path-entry flow. Path fields support `Tab` and `Ctrl+I` completions.
 
-Each `bvim <file>` command starts its own local server on the first available
+Each `evim <file>` command starts its own local server on the first available
 port at or above `8000`, so multiple Markdown files can be open at the same
 time.
 
@@ -60,7 +60,7 @@ time.
 - `?` toggles the shortcut overlay.
 - `Esc` or `Ctrl+[` closes overlays or command mode.
 - `:` opens the command line.
-- `Ctrl+C` exits bvim entirely.
+- `Ctrl+C` exits evim entirely.
 - `:edit` opens the current file in Vim.
 - `:38` opens the current file in Vim at line 38 and centers that line.
 - `:e <name>` opens another `.md` file in the current document directory.
@@ -71,10 +71,10 @@ Markdown image references such as `![caption](./image.png)` are resolved
 relative to the Markdown file. Block LaTeX is rendered from `$$ ... $$`, and
 inline LaTeX is rendered from `$...$`.
 
-Equation plots can be embedded with JavaScript-backed `bvim-plot` code fences:
+Equation plots can be embedded with JavaScript-backed `evim-plot` code fences:
 
 ````md
-```bvim-plot
+```evim-plot
 plot.func({
   x: [-6, 6],
   samples: 500,
@@ -109,7 +109,7 @@ document directory and the app's internal `documents/` directory.
 To choose a terminal or editor explicitly:
 
 ```bash
-BVIM_TERMINAL=alacritty BVIM_EDITOR=nvim bvim notes.md
+EVIM_TERMINAL=alacritty EVIM_EDITOR=nvim evim notes.md
 ```
 
 ## Development
@@ -138,13 +138,30 @@ Run the desktop shell directly when debugging Electron behavior:
 npm run desktop
 ```
 
+## Docs Website
+
+The public docs site lives in `docs_website/` and reads the checked-in README,
+agent guide, parser, and plot runtime files directly from this repo.
+
+```bash
+cd docs_website
+npm install
+npm run build
+```
+
+Production docs are deployed at:
+
+```text
+https://evim.ryangerardwilson.com
+```
+
 ## Release
 
-`bvim` follows the local RGW CLI contract:
+`evim` follows the local RGW CLI contract:
 
-- `bvim -h` prints help.
-- `bvim -v` prints the installed version.
-- `bvim -u` delegates to the installer upgrade path.
+- `evim -h` prints help.
+- `evim -v` prints the installed version.
+- `evim -u` delegates to the installer upgrade path.
 - `install.sh -h`, `install.sh -v`, `install.sh -v <version>`, `install.sh -u`,
   and `install.sh -b <archive.tar.gz>` are supported.
 

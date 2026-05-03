@@ -1,0 +1,222 @@
+:root {
+  --bg: #000000;
+  --panel: #050505;
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, 0.68);
+  --faint: rgba(255, 255, 255, 0.44);
+  --line: rgba(255, 255, 255, 0.18);
+  --line-strong: rgba(255, 255, 255, 0.48);
+  --mono: "Courier New", Courier, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+::selection {
+  background: #ffffff;
+  color: #000000;
+}
+
+a,
+button {
+  color: inherit;
+  font: inherit;
+}
+
+a {
+  text-decoration: none;
+}
+
+.docs-scene {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.docs-shell {
+  width: min(1180px, calc(100vw - 28px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 18px 0 24px;
+}
+
+.docs-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+}
+
+.kicker {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 5.8rem);
+  line-height: 0.86;
+  letter-spacing: 0;
+  font-weight: 800;
+}
+
+.top-links,
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.top-links a,
+.doc-actions a,
+.copy-button {
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: #000000;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.top-links a:hover,
+.doc-actions a:hover,
+.copy-button:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+  min-height: calc(100vh - 150px);
+}
+
+.doc-tabs {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.doc-tab {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.doc-tab:hover,
+.doc-tab.active {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.doc-tab span,
+.doc-tab em {
+  color: var(--faint);
+  font-size: 0.72rem;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.doc-tab strong {
+  font-size: 0.9rem;
+}
+
+.doc-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.doc-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.doc-source {
+  min-height: calc(100vh - 198px);
+  max-height: calc(100vh - 198px);
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  color: var(--text);
+  font-size: clamp(0.78rem, 0.73rem + 0.16vw, 0.92rem);
+  line-height: 1.65;
+  white-space: pre;
+  scrollbar-width: none;
+}
+
+.doc-source::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .docs-shell {
+    width: min(100%, calc(100vw - 16px));
+    padding-top: 14px;
+  }
+
+  .docs-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .top-links {
+    justify-content: flex-start;
+  }
+
+  .docs-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .doc-tabs {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .doc-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .doc-tab {
+    min-width: 230px;
+  }
+
+  .doc-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .doc-actions {
+    justify-content: flex-start;
+  }
+
+  .doc-source {
+    min-height: 65vh;
+    max-height: none;
+  }
+}

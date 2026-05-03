@@ -1,12 +1,12 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("bvimDesktop", {
+contextBridge.exposeInMainWorld("evimDesktop", {
   quit() {
-    ipcRenderer.send("bvim-quit");
+    ipcRenderer.send("evim-quit");
   },
   onControlKey(handler) {
     const listener = (_event, key) => handler(key);
-    ipcRenderer.on("bvim-control-key", listener);
-    return () => ipcRenderer.removeListener("bvim-control-key", listener);
+    ipcRenderer.on("evim-control-key", listener);
+    return () => ipcRenderer.removeListener("evim-control-key", listener);
   }
 });

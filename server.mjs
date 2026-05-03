@@ -9,10 +9,10 @@ import { createServer as createViteServer } from "vite";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const documentsDir = path.join(__dirname, "documents");
 const documentsRoot = path.resolve(documentsDir);
-const workspaceRoot = path.resolve(process.env.BVIM_WORKSPACE || documentsDir);
-const initialFile = process.env.BVIM_INITIAL_FILE ? path.resolve(process.env.BVIM_INITIAL_FILE) : null;
+const workspaceRoot = path.resolve(process.env.EVIM_WORKSPACE || documentsDir);
+const initialFile = process.env.EVIM_INITIAL_FILE ? path.resolve(process.env.EVIM_INITIAL_FILE) : null;
 const port = Number(process.env.PORT || 8000);
-const stateDir = path.join(os.homedir(), ".local", "state", "bvim");
+const stateDir = path.join(os.homedir(), ".local", "state", "evim");
 const recentPath = path.join(stateDir, "recent.json");
 const allowedRoots = Array.from(
   new Set([documentsRoot, workspaceRoot, initialFile ? path.dirname(initialFile) : null].filter(Boolean))
@@ -131,11 +131,11 @@ function resolveDocumentPath(value) {
   const fullPath = path.resolve(withDocumentExtension(unresolved));
 
   if (!hasDocumentExtension(fullPath)) {
-    throw new Error("bvim documents must end in .md");
+    throw new Error("evim documents must end in .md");
   }
 
   if (!allowedRoots.some((root) => isInsideRoot(fullPath, root))) {
-    throw new Error("document path is outside this bvim session");
+    throw new Error("document path is outside this evim session");
   }
 
   return { file: displayFileName(fullPath), fullPath };
@@ -249,7 +249,7 @@ function commandExists(command) {
 }
 
 async function resolveTerminalCommand({ workdir, title, command }) {
-  const preferred = process.env.BVIM_TERMINAL || process.env.TERMINAL || "";
+  const preferred = process.env.EVIM_TERMINAL || process.env.TERMINAL || "";
   const preferredName = path.basename(preferred);
 
   if (preferredName && (await commandExists(preferredName))) {
@@ -353,10 +353,10 @@ function launchTerminal({ executable, args, workdir }) {
 }
 
 async function openTerminalEditor(fullPath, line = null) {
-  const editor = process.env.BVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
+  const editor = process.env.EVIM_EDITOR || process.env.VISUAL || process.env.EDITOR || "vim";
   const workdir = path.dirname(fullPath);
   const command = buildEditorCommand(editor, fullPath, line);
-  const title = `bvim ${path.basename(fullPath)}`;
+  const title = `evim ${path.basename(fullPath)}`;
   const terminal = await resolveTerminalCommand({ workdir, title, command });
   await launchTerminal({ ...terminal, workdir });
   return terminal.executable;
@@ -375,7 +375,7 @@ app.get("/api/documents", async (_req, res) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ app: "bvim", ok: true });
+  res.json({ app: "evim", ok: true });
 });
 
 app.get("/api/path-completions", async (req, res) => {
@@ -496,5 +496,5 @@ const vite = await createViteServer({
 app.use(vite.middlewares);
 
 app.listen(port, "127.0.0.1", () => {
-  console.log(`bvim running at http://localhost:${port}`);
+  console.log(`evim running at http://localhost:${port}`);
 });

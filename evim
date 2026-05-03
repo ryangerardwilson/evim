@@ -6,4 +6,4 @@ if command -v readlink >/dev/null 2>&1; then
   SOURCE="$(readlink -f "$SOURCE")"
 fi
 APP_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-exec node "$APP_DIR/bin/bvim.mjs" "$@"
+exec node "$APP_DIR/bin/evim.mjs" "$@"

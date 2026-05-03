@@ -370,7 +370,7 @@ self.onmessage = (event) => {
 
 const IFRAME_RUNTIME = String.raw`
 function postResult(payload) {
-  parent.postMessage({ type: "bvim-plot-result", id: BLOCK_ID, ...payload }, "*");
+  parent.postMessage({ type: "evim-plot-result", id: BLOCK_ID, ...payload }, "*");
 }
 
 try {

@@ -14,28 +14,28 @@ const packageJson = require("../package.json");
 const electronPath = require("electron");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
-const stateDir = path.join(os.homedir(), ".local", "state", "bvim");
+const stateDir = path.join(os.homedir(), ".local", "state", "evim");
 const recentPath = path.join(stateDir, "recent.json");
 
-const HELP = `bvim
+const HELP = `evim
 
 flags:
-  bvim -h
+  evim -h
     show this help
-  bvim -v
+  evim -v
     print the installed version
-  bvim -u
+  evim -u
     upgrade through the installer
 
 features:
   choose a recent Markdown document, create a new one, or open a path
-  # bvim
-  bvim
+  # evim
+  evim
 
   open or create a Markdown document preview
-  # bvim <file.md>
-  bvim notes.md
-  bvim ~/Documents/notes.md
+  # evim <file.md>
+  evim notes.md
+  evim ~/Documents/notes.md
 
   run the development web server
   # npm run dev
@@ -152,7 +152,7 @@ function isTerminalEnterKey(key) {
 function renderDocumentPrompt({ step, title, rawPath, message = "" }) {
   const defaultPath = title ? path.resolve(process.cwd(), documentFileNameFromName(title)) : "";
   process.stdout.write("\x1b[2J\x1b[H");
-  process.stdout.write("bvim new document\n\n");
+  process.stdout.write("evim new document\n\n");
   process.stdout.write(`document name: ${title}${step === "title" ? "_" : ""}\n`);
   if (step === "path") {
     process.stdout.write(`path [${formatChoice(defaultPath)}]: ${rawPath}_\n`);
@@ -254,7 +254,7 @@ async function promptForDocument({ allowBack = false } = {}) {
 
 function renderOpenPathPrompt({ rawPath, message = "" }) {
   process.stdout.write("\x1b[2J\x1b[H");
-  process.stdout.write("bvim open path\n\n");
+  process.stdout.write("evim open path\n\n");
   process.stdout.write(`path: ${rawPath}_\n`);
   process.stdout.write("\nenter open  esc back\n");
   if (message) {
@@ -339,7 +339,7 @@ async function selectLaunchAction(documents) {
 
   const render = () => {
     process.stdout.write("\x1b[2J\x1b[H");
-    process.stdout.write("bvim\n\n");
+    process.stdout.write("evim\n\n");
     options.forEach((option, itemIndex) => {
       const marker = itemIndex === index ? ">" : " ";
       process.stdout.write(`${marker} ${option.label}\n`);
@@ -453,10 +453,10 @@ function runElectron({ filePath, port, needsDocument = false, workspacePath = nu
         stdio: "inherit",
         env: {
           ...process.env,
-          BVIM_PORT: String(port),
-          BVIM_WORKSPACE: workspacePath || (filePath ? path.dirname(filePath) : process.cwd()),
-          BVIM_INITIAL_FILE: filePath || "",
-          BVIM_NEEDS_DOCUMENT: needsDocument ? "1" : ""
+          EVIM_PORT: String(port),
+          EVIM_WORKSPACE: workspacePath || (filePath ? path.dirname(filePath) : process.cwd()),
+          EVIM_INITIAL_FILE: filePath || "",
+          EVIM_NEEDS_DOCUMENT: needsDocument ? "1" : ""
         }
       }
     );
@@ -473,7 +473,7 @@ function runElectron({ filePath, port, needsDocument = false, workspacePath = nu
 }
 
 function runInstallerUpgrade() {
-  const installScript = process.env.BVIM_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
+  const installScript = process.env.EVIM_INSTALL_SCRIPT || path.join(appRoot, "install.sh");
   return new Promise((resolve, reject) => {
     const child = spawn(installScript, ["-u"], {
       cwd: appRoot,
@@ -515,7 +515,7 @@ async function main(argv) {
   let filePath;
   if (argv.length === 0) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      const preferredPort = Number(process.env.BVIM_PORT || process.env.PORT || 8000);
+      const preferredPort = Number(process.env.EVIM_PORT || process.env.PORT || 8000);
       const port = await findPort(preferredPort);
       return runElectron({ filePath: null, port, needsDocument: true, workspacePath: os.homedir() });
     }
@@ -553,7 +553,7 @@ async function main(argv) {
   }
 
   await rememberRecentDocument(filePath);
-  const preferredPort = Number(process.env.BVIM_PORT || process.env.PORT || 8000);
+  const preferredPort = Number(process.env.EVIM_PORT || process.env.PORT || 8000);
   const port = await findPort(preferredPort);
   return runElectron({ filePath, port });
 }
@@ -561,6 +561,6 @@ async function main(argv) {
 main(process.argv.slice(2))
   .then((code) => process.exit(code))
   .catch((error) => {
-    process.stderr.write(`bvim: ${error.message}\n`);
+    process.stderr.write(`evim: ${error.message}\n`);
     process.exit(1);
   });

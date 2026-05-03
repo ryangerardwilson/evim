@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderPlotSvg } from "@ryangerardwilson/bvim-markdown";
+import { renderPlotSvg } from "@ryangerardwilson/evim-markdown";
 
 test("plot renderer keeps the svg transparent and uses safe series colors", () => {
   const { html } = renderPlotSvg([

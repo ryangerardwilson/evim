@@ -3,9 +3,9 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 
 const appRoot = path.resolve(__dirname, "..");
-const port = Number(process.env.BVIM_PORT || process.env.PORT || 8000);
-const initialFile = process.env.BVIM_INITIAL_FILE || "";
-const workspaceRoot = process.env.BVIM_WORKSPACE || process.cwd();
+const port = Number(process.env.EVIM_PORT || process.env.PORT || 8000);
+const initialFile = process.env.EVIM_INITIAL_FILE || "";
+const workspaceRoot = process.env.EVIM_WORKSPACE || process.cwd();
 const serverUrl = `http://127.0.0.1:${port}`;
 let serverProcess = null;
 
@@ -26,7 +26,7 @@ async function serverIsReady() {
       return false;
     }
     const payload = await response.json().catch(() => ({}));
-    return payload.app === "bvim";
+    return payload.app === "evim";
   } catch {
     return false;
   } finally {
@@ -41,7 +41,7 @@ async function waitForServer() {
     }
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  throw new Error(`bvim server did not become ready on port ${port}`);
+  throw new Error(`evim server did not become ready on port ${port}`);
 }
 
 async function ensureServer() {
@@ -54,8 +54,8 @@ async function ensureServer() {
     env: {
       ...process.env,
       PORT: String(port),
-      BVIM_WORKSPACE: workspaceRoot,
-      BVIM_INITIAL_FILE: initialFile
+      EVIM_WORKSPACE: workspaceRoot,
+      EVIM_INITIAL_FILE: initialFile
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -64,7 +64,7 @@ async function ensureServer() {
   serverProcess.stderr.on("data", (chunk) => process.stderr.write(chunk));
   serverProcess.on("exit", (code) => {
     if (code !== 0 && code !== null) {
-      console.error(`bvim server exited with code ${code}`);
+      console.error(`evim server exited with code ${code}`);
     }
   });
 
@@ -81,7 +81,7 @@ function forwardReservedEditorKeys(window) {
     }
     if ((input.control || input.meta) && !input.alt && key === "w") {
       event.preventDefault();
-      window.webContents.send("bvim-control-key", "w");
+      window.webContents.send("evim-control-key", "w");
     }
   });
 }
@@ -115,7 +115,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
-  ipcMain.on("bvim-quit", () => app.quit());
+  ipcMain.on("evim-quit", () => app.quit());
   createWindow().catch((error) => {
     console.error(error);
     app.quit();

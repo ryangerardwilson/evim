@@ -24,11 +24,11 @@ function execInstall(args) {
 
 test("install.sh -h prints installer help", async () => {
   const { stdout } = await execInstall(["-h"]);
-  assert.match(stdout, /^bvim installer\n/);
+  assert.match(stdout, /^evim installer\n/);
   assert.match(stdout, /install\.sh -u/);
 });
 
-test("installer checks installed version with bvim -v", async () => {
+test("installer checks installed version with evim -v", async () => {
   const source = await fs.readFile(installScript, "utf8");
   assert.match(source, /\$LAUNCHER" -v/);
 });

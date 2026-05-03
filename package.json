@@ -1,5 +1,5 @@
 {
-  "name": "bvim",
+  "name": "evim",
   "version": "0.1.1",
   "private": true,
   "type": "module",
@@ -7,17 +7,17 @@
     "packages/*"
   ],
   "exports": {
-    "./markdown": "./packages/bvim-markdown/src/index.js",
-    "./markdown/markdown": "./packages/bvim-markdown/src/markdown.js",
-    "./markdown/latex": "./packages/bvim-markdown/src/latex.js",
-    "./markdown/noteIndex": "./packages/bvim-markdown/src/noteIndex.js",
-    "./markdown/plotFrame": "./packages/bvim-markdown/src/plotFrame.js"
+    "./markdown": "./packages/evim-markdown/src/index.js",
+    "./markdown/markdown": "./packages/evim-markdown/src/markdown.js",
+    "./markdown/latex": "./packages/evim-markdown/src/latex.js",
+    "./markdown/noteIndex": "./packages/evim-markdown/src/noteIndex.js",
+    "./markdown/plotFrame": "./packages/evim-markdown/src/plotFrame.js"
   },
   "bin": {
-    "bvim": "./bin/bvim.mjs"
+    "evim": "./bin/evim.mjs"
   },
   "scripts": {
-    "cli": "node bin/bvim.mjs",
+    "cli": "node bin/evim.mjs",
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "desktop": "electron --in-process-gpu --disable-gpu-sandbox --disable-vulkan --disable-features=Vulkan,VulkanFromANGLE electron/main.cjs",
@@ -26,7 +26,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
-    "@ryangerardwilson/bvim-markdown": "file:packages/bvim-markdown",
+    "@ryangerardwilson/evim-markdown": "file:packages/evim-markdown",
     "@vitejs/plugin-react": "^5.1.2",
     "express": "^5.2.1",
     "katex": "^0.16.25",

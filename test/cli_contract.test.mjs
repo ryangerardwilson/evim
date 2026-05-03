@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const launcher = path.join(appRoot, "bvim");
+const launcher = path.join(appRoot, "evim");
 
 function execLauncher(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -25,7 +25,7 @@ function execLauncher(args, options = {}) {
 
 test("-h prints human help", async () => {
   const { stdout } = await execLauncher(["-h"]);
-  assert.match(stdout, /^bvim\n/);
+  assert.match(stdout, /^evim\n/);
   assert.match(stdout, /features:/);
   assert.doesNotMatch(stdout, /Usage:/);
 });
@@ -37,7 +37,7 @@ test("-v prints package version only", async () => {
 });
 
 test("-u delegates to installer upgrade mode", async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "bvim-test-"));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "evim-test-"));
   const installer = path.join(tmp, "install.sh");
   const log = path.join(tmp, "args.txt");
   await fs.writeFile(
@@ -47,7 +47,7 @@ test("-u delegates to installer upgrade mode", async () => {
   );
   await fs.chmod(installer, 0o755);
   await execLauncher(["-u"], {
-    env: { ...process.env, BVIM_INSTALL_SCRIPT: installer }
+    env: { ...process.env, EVIM_INSTALL_SCRIPT: installer }
   });
   assert.equal((await fs.readFile(log, "utf8")).trim(), "-u");
 });

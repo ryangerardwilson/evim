@@ -6,7 +6,7 @@ import {
   noteEntryFromMarkdownFile,
   organizeNoteIndex,
   selectedNoteIndex
-} from "@ryangerardwilson/bvim-markdown";
+} from "@ryangerardwilson/evim-markdown";
 
 test("markdown files become note index entries", () => {
   assert.deepEqual(noteEntryFromMarkdownFile({ relativePath: "math/calculus_i.md", markdown: "# Calculus I\n" }), {

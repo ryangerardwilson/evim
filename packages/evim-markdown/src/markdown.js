@@ -20,7 +20,7 @@ function codeFenceKind(language) {
 }
 
 function isPlotFence(language) {
-  return ["bvim-plot", "bvimplot", "plot"].includes(codeFenceKind(language));
+  return ["evim-plot", "evimplot", "plot"].includes(codeFenceKind(language));
 }
 
 function sourceLines(markdown) {

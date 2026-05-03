@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { headingIndexFromNodes, inlineParts, parseMarkdown } from "@ryangerardwilson/bvim-markdown";
+import { headingIndexFromNodes, inlineParts, parseMarkdown } from "@ryangerardwilson/evim-markdown";
 
 test("plain vim lines stay as line-separated paragraph text", () => {
   assert.deepEqual(parseMarkdown("one\ntwo\nthree\n"), [
@@ -86,15 +86,15 @@ test("latex block tracks source range without preserving fence whitespace", () =
   });
 });
 
-test("bvim plot fences render as plot nodes across their source range", () => {
-  const nodes = parseMarkdown("```bvim-plot\nplot.func({ y: x => x * x })\n```\n");
+test("evim plot fences render as plot nodes across their source range", () => {
+  const nodes = parseMarkdown("```evim-plot\nplot.func({ y: x => x * x })\n```\n");
   assert.deepEqual(nodes, [
     {
       type: "plot",
       line: 1,
       lineNumbers: [1, 2, 3],
       lines: ["plot.func({ y: x => x * x })"],
-      language: "bvim-plot",
+      language: "evim-plot",
       value: "plot.func({ y: x => x * x })"
     }
   ]);
