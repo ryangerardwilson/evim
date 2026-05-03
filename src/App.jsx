@@ -73,6 +73,8 @@ const KEYBOARD_LOCK_KEYS = [
   "Tab"
 ];
 let killRing = "";
+const HELD_SCROLL_PACE = 3;
+const SINGLE_SCROLL_SECONDS = 0.34;
 
 function cx(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -202,6 +204,10 @@ function longestCommonPrefix(values) {
     }
   }
   return prefix;
+}
+
+function documentScrollStep(node) {
+  return Math.max(96, node.clientHeight * 0.32);
 }
 
 function commitTextValue(target, setValue, nextValue, start, end = start) {
@@ -1137,7 +1143,8 @@ export default function App() {
 
       const lastTime = state.lastTime || time;
       const elapsed = Math.max(0, Math.min(34, time - lastTime));
-      const pixelsPerSecond = Math.max(720, Math.min(1700, node.clientHeight * 2.1));
+      const normalPace = documentScrollStep(node) / SINGLE_SCROLL_SECONDS;
+      const pixelsPerSecond = Math.min(3200, normalPace * HELD_SCROLL_PACE);
       state.lastTime = time;
       node.scrollTop += state.direction * pixelsPerSecond * (elapsed / 1000);
       updateScrollProgress();
@@ -1164,6 +1171,18 @@ export default function App() {
       }
     },
     [animateDocumentScroll, stopDocumentScroll]
+  );
+
+  const scrollDocumentStep = useCallback(
+    (direction) => {
+      const node = documentRef.current;
+      if (!node) {
+        return;
+      }
+      stopDocumentScroll();
+      node.scrollBy({ top: direction * documentScrollStep(node), behavior: "smooth" });
+    },
+    [stopDocumentScroll]
   );
 
   const scrollDocumentTo = useCallback((position) => {
@@ -1460,13 +1479,21 @@ export default function App() {
 
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault();
-        startDocumentScroll(1);
+        if (event.repeat) {
+          startDocumentScroll(1);
+        } else {
+          scrollDocumentStep(1);
+        }
         return;
       }
 
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
-        startDocumentScroll(-1);
+        if (event.repeat) {
+          startDocumentScroll(-1);
+        } else {
+          scrollDocumentStep(-1);
+        }
         return;
       }
 
@@ -1518,6 +1545,7 @@ export default function App() {
     recentDocuments,
     recentIndex,
     reloadDocument,
+    scrollDocumentStep,
     scrollDocumentTo,
     shortcutsOpen,
     startDocumentScroll,
