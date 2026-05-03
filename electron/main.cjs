@@ -13,6 +13,7 @@ app.commandLine.appendSwitch("in-process-gpu");
 app.commandLine.appendSwitch("disable-gpu-sandbox");
 app.commandLine.appendSwitch("disable-vulkan");
 app.commandLine.appendSwitch("disable-features", "Vulkan,VulkanFromANGLE");
+app.commandLine.appendSwitch("disable-http-cache");
 
 async function serverIsReady() {
   const controller = new AbortController();
@@ -105,6 +106,7 @@ async function createWindow() {
   });
 
   forwardReservedEditorKeys(window);
+  await window.webContents.session.clearCache();
   const targetUrl = initialFile
     ? `${serverUrl}/?file=${encodeURIComponent(initialFile)}`
     : serverUrl;
