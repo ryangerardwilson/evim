@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { sourceDocs } from "./source-docs";
 
 export const site = {
   name: "evim",
@@ -7,13 +6,6 @@ export const site = {
   url: "https://evim.ryangerardwilson.com",
   repoUrl: "https://github.com/ryangerardwilson/evim"
 };
-
-const ROOT = process.cwd();
-
-function repoPath(fileName) {
-  const candidates = [join(ROOT, "..", fileName), join(ROOT, fileName)];
-  return candidates.find((candidate) => existsSync(candidate)) || candidates[0];
-}
 
 export const docs = [
   {
@@ -50,7 +42,7 @@ export function getDoc(slug = "readme") {
   const doc = docs.find((item) => item.slug === slug) || docs[0];
   return {
     ...doc,
-    content: readFileSync(repoPath(doc.path), "utf8"),
+    content: sourceDocs[doc.slug] || "",
     repoHref: `${site.repoUrl}/blob/main/${doc.path}`
   };
 }
