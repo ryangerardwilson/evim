@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { headingIndexFromNodes, inlineParts, parseMarkdown } from "../src/markdown.js";
+import { headingIndexFromNodes, inlineParts, parseMarkdown } from "@ryangerardwilson/bvim-markdown";
 
 test("plain vim lines stay as line-separated paragraph text", () => {
   assert.deepEqual(parseMarkdown("one\ntwo\nthree\n"), [

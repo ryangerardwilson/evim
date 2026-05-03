@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { leftAlignedLatexRows } from "../src/latex.js";
+import { leftAlignedLatexRows } from "@ryangerardwilson/bvim-markdown";
 
 test("aligned latex blocks are flattened into left-aligned rows", () => {
   assert.deepEqual(

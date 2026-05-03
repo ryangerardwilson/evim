@@ -1,3 +1,5 @@
+import katex from "katex";
+
 function scriptJson(value) {
   return JSON.stringify(String(value ?? ""))
     .replace(/</g, "\\u003c")
@@ -15,6 +17,9 @@ const RESERVED_KEYS = new Set([
   "sampleCount",
   "title",
   "label",
+  "labelLatex",
+  "latexLabel",
+  "legendLatex",
   "name",
   "color",
   "stroke",
@@ -108,8 +113,10 @@ function seriesStyle(source) {
     return {};
   }
   const color = source.color ?? source.stroke ?? source.lineColor;
+  const labelLatex = source.labelLatex ?? source.latexLabel ?? source.legendLatex;
   const strokeWidth = source.strokeWidth ?? source.lineWidth ?? source.width;
   return {
+    ...(labelLatex === undefined ? {} : { labelLatex: String(labelLatex) }),
     ...(color === undefined ? {} : { color: String(color) }),
     ...(strokeWidth === undefined ? {} : { strokeWidth })
   };
@@ -358,6 +365,23 @@ function escapeSvg(value) {
     .replace(/"/g, "&quot;");
 }
 
+function legendLatexSource(item) {
+  const source = item?.labelLatex ?? item?.latexLabel ?? item?.legendLatex;
+  return typeof source === "string" && source.trim() ? source.trim() : "";
+}
+
+function renderLegendLatex(source) {
+  try {
+    return katex.renderToString(source, {
+      displayMode: false,
+      throwOnError: false,
+      strict: false
+    });
+  } catch {
+    return escapeSvg(source);
+  }
+}
+
 function finite(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -455,7 +479,7 @@ function safePlotWidth(value) {
   return Math.max(300, Math.min(920, width));
 }
 
-function plotMetrics(width, seriesCount) {
+function plotMetrics(width, seriesCount, hasLatexLegend = false) {
   const compact = width < 560;
   const cramped = width < 420;
   return {
@@ -466,9 +490,9 @@ function plotMetrics(width, seriesCount) {
     right: compact ? 10 : 18,
     top: compact ? 32 : 30,
     gridHeight: cramped ? 220 : compact ? 238 : 230,
-    legendColumns: compact || seriesCount < 2 ? 1 : 2,
-    legendRowHeight: compact ? 28 : 24,
-    legendGap: compact ? 54 : 48
+    legendColumns: hasLatexLegend || compact || seriesCount < 2 ? 1 : 2,
+    legendRowHeight: hasLatexLegend ? (compact ? 34 : 30) : compact ? 28 : 24,
+    legendGap: hasLatexLegend ? (compact ? 60 : 56) : compact ? 54 : 48
   };
 }
 
@@ -506,7 +530,8 @@ function circlesFromPoints(points, xScale, yScale, color) {
 
 function plotHeight(plot, width) {
   const seriesCount = (plot.series || []).length;
-  const metrics = plotMetrics(width, seriesCount);
+  const hasLatexLegend = (plot.series || []).some((item) => legendLatexSource(item));
+  const metrics = plotMetrics(width, seriesCount, hasLatexLegend);
   const legendRows = Math.ceil(seriesCount / metrics.legendColumns);
   const titleHeight = plot.title ? 32 : 16;
   const axisAndTicks = 36;
@@ -516,7 +541,8 @@ function plotHeight(plot, width) {
 
 function renderPlot(plot, offsetY, width, height) {
   const series = plot.series || [];
-  const metrics = plotMetrics(width, series.length);
+  const hasLatexLegend = series.some((item) => legendLatexSource(item));
+  const metrics = plotMetrics(width, series.length, hasLatexLegend);
   const legendRows = Math.ceil(series.length / metrics.legendColumns);
   const legendHeight = series.length ? 26 + legendRows * metrics.legendRowHeight : 0;
   const margin = {
@@ -567,7 +593,12 @@ function renderPlot(plot, offsetY, width, height) {
       const x = margin.left + column * legendColumnWidth;
       const y = legendTop + row * metrics.legendRowHeight;
       const color = safeColor(item.color, PLOT_PALETTE.strokes[index % PLOT_PALETTE.strokes.length]);
-      return `<g><line x1="${x}" y1="${y}" x2="${x + 28}" y2="${y}" stroke="${color}" stroke-width="3.2" stroke-linecap="round" /><text x="${x + 38}" y="${y + 5}" fill="${PLOT_PALETTE.ink}" font-size="${metrics.legendFont}">${escapeSvg(item.label || "series")}</text></g>`;
+      const latex = legendLatexSource(item);
+      const labelWidth = Math.max(120, legendColumnWidth - 44);
+      const label = latex
+        ? `<foreignObject x="${x + 38}" y="${y - 14}" width="${labelWidth}" height="${metrics.legendRowHeight + 8}"><div xmlns="http://www.w3.org/1999/xhtml" class="plot-legend-latex">${renderLegendLatex(latex)}</div></foreignObject>`
+        : `<text x="${x + 38}" y="${y + 5}" fill="${PLOT_PALETTE.ink}" font-size="${metrics.legendFont}">${escapeSvg(item.label || "series")}</text>`;
+      return `<g><line x1="${x}" y1="${y}" x2="${x + 28}" y2="${y}" stroke="${color}" stroke-width="3.2" stroke-linecap="round" />${label}</g>`;
     })
     .join("");
   return `<g transform="translate(0 ${offsetY})">${title}${grid}<line x1="${margin.left}" y1="${xAxis.toFixed(2)}" x2="${margin.left + innerWidth}" y2="${xAxis.toFixed(2)}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" /><line x1="${yAxis.toFixed(2)}" y1="${margin.top}" x2="${yAxis.toFixed(2)}" y2="${margin.top + innerHeight}" stroke="${PLOT_PALETTE.axis}" stroke-width="1.2" />${tickLabels}${paths}${legend}</g>`;

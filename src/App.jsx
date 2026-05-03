@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import katex from "katex";
+import {
+  headingIndexFromNodes,
+  inlineParts,
+  leftAlignedLatexRows,
+  parseMarkdown,
+  plotFrameSource,
+  renderPlotSvg
+} from "@ryangerardwilson/bvim-markdown";
 import { resolveNamedDocumentPath } from "./documentPaths.js";
-import { leftAlignedLatexRows } from "./latex.js";
-import { headingIndexFromNodes, inlineParts, parseMarkdown } from "./markdown.js";
-import { plotFrameSource, renderPlotSvg } from "./plotFrame.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);

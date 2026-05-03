@@ -3,6 +3,15 @@
   "version": "0.1.1",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "exports": {
+    "./markdown": "./packages/bvim-markdown/src/index.js",
+    "./markdown/markdown": "./packages/bvim-markdown/src/markdown.js",
+    "./markdown/latex": "./packages/bvim-markdown/src/latex.js",
+    "./markdown/plotFrame": "./packages/bvim-markdown/src/plotFrame.js"
+  },
   "bin": {
     "bvim": "./bin/bvim.mjs"
   },
@@ -16,6 +25,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 8000"
   },
   "dependencies": {
+    "@ryangerardwilson/bvim-markdown": "file:packages/bvim-markdown",
     "@vitejs/plugin-react": "^5.1.2",
     "electron": "^41.3.0",
     "express": "^5.2.1",

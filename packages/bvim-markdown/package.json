@@ -1,0 +1,15 @@
+{
+  "name": "@ryangerardwilson/bvim-markdown",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./markdown": "./src/markdown.js",
+    "./latex": "./src/latex.js",
+    "./plotFrame": "./src/plotFrame.js"
+  },
+  "dependencies": {
+    "katex": "^0.16.25"
+  }
+}
