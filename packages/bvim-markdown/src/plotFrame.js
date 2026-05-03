@@ -108,12 +108,81 @@ function sampleFunction(fn, domain, samples) {
   return points;
 }
 
-function seriesStyle(source) {
+function stripOuterParens(value) {
+  let output = String(value || "").trim();
+  while (output.startsWith("(") && output.endsWith(")")) {
+    let depth = 0;
+    let wraps = true;
+    for (let index = 0; index < output.length; index += 1) {
+      const char = output[index];
+      if (char === "(") {
+        depth += 1;
+      }
+      if (char === ")") {
+        depth -= 1;
+      }
+      if (depth === 0 && index < output.length - 1) {
+        wraps = false;
+        break;
+      }
+    }
+    if (!wraps) {
+      break;
+    }
+    output = output.slice(1, -1).trim();
+  }
+  return output;
+}
+
+function functionExpression(fn) {
+  const source = Function.prototype.toString.call(fn).trim();
+  const arrow = source.indexOf("=>");
+  if (arrow >= 0) {
+    const body = source.slice(arrow + 2).trim();
+    if (body.startsWith("{")) {
+      const match = body.match(/return\s+([^;]+);?/);
+      return match ? match[1].trim() : "";
+    }
+    return stripOuterParens(body.replace(/;$/, ""));
+  }
+  const match = source.match(/return\s+([^;]+);?/);
+  return match ? match[1].trim() : "";
+}
+
+function latexFromFunction(fn) {
+  let latex = functionExpression(fn);
+  if (!latex) {
+    return "";
+  }
+
+  latex = stripOuterParens(latex)
+    .replace(/Math\./g, "")
+    .replace(/\blog10\s*\(\s*([^)]+)\s*\)/g, "\\log_{10}($1)")
+    .replace(/\blog\s*\(\s*([^)]+)\s*\)/g, "\\ln($1)");
+
+  for (let index = 0; index < 6; index += 1) {
+    latex = latex.replace(
+      /(\([^()]+\)|\b[A-Za-z]\w*\b|\d+(?:\.\d+)?)\s*\*\*\s*(\([^()]+\)|\b[A-Za-z]\w*\b|\d+(?:\.\d+)?)/g,
+      (_, base, exponent) => stripOuterParens(base) + "^{" + stripOuterParens(exponent) + "}"
+    );
+  }
+
+  latex = latex
+    .replace(/\bE\b/g, "e")
+    .replace(/\s*\*\s*/g, "")
+    .replace(/\s*\/\s*/g, "/")
+    .replace(/\s*([+=-])\s*/g, "$1")
+    .replace(/\+\-/g, "-");
+
+  return latex ? "y=" + latex : "";
+}
+
+function seriesStyle(source, fallbackLatex = undefined) {
   if (!source || typeof source !== "object") {
-    return {};
+    return fallbackLatex ? { labelLatex: fallbackLatex } : {};
   }
   const color = source.color ?? source.stroke ?? source.lineColor;
-  const labelLatex = source.labelLatex ?? source.latexLabel ?? source.legendLatex;
+  const labelLatex = source.labelLatex ?? source.latexLabel ?? source.legendLatex ?? fallbackLatex;
   const strokeWidth = source.strokeWidth ?? source.lineWidth ?? source.width;
   return {
     ...(labelLatex === undefined ? {} : { labelLatex: String(labelLatex) }),
@@ -122,13 +191,13 @@ function seriesStyle(source) {
   };
 }
 
-function withSeriesStyle(series, source) {
-  return { ...series, ...seriesStyle(source) };
+function withSeriesStyle(series, source, fallbackLatex = undefined) {
+  return { ...series, ...seriesStyle(source, fallbackLatex) };
 }
 
 function seriesFromValue(label, value, domain, samples, styleSource = null) {
   if (typeof value === "function") {
-    return withSeriesStyle({ label, points: sampleFunction(value, domain, samples) }, styleSource);
+    return withSeriesStyle({ label, points: sampleFunction(value, domain, samples) }, styleSource, latexFromFunction(value));
   }
 
   if (typeof value === "number") {
@@ -137,7 +206,8 @@ function seriesFromValue(label, value, domain, samples, styleSource = null) {
         label,
         points: Array.from({ length: samples }, (_, index) => pointFrom(generatedX(domain, samples, index), value))
       },
-      styleSource
+      styleSource,
+      "y=" + String(value)
     );
   }
 
