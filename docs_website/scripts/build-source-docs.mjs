@@ -11,8 +11,7 @@ const outputPath = join(docsRoot, "lib", "source-docs.js");
 const files = [
   ["readme", "README.md"],
   ["agents", "AGENTS.md"],
-  ["markdown", "packages/evim-markdown/src/markdown.js"],
-  ["plots", "packages/evim-markdown/src/plotFrame.js"]
+  ["example", "EXAMPLE.md"]
 ];
 
 const existingGenerated = existsSync(outputPath) ? await fs.readFile(outputPath, "utf8") : "";

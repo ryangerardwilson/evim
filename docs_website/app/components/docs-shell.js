@@ -1,50 +1,81 @@
 import CopyDocsButton from "./copy-docs-button";
 import { docs, getDoc, site } from "../../lib/docs";
 
-export default function DocsShell({ activeSlug }) {
+const AUTHOR_URL = "https://ryangerardwilson.com/";
+
+function GitHubMark() {
+  return (
+    <svg className="docs-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+      />
+    </svg>
+  );
+}
+
+export default function DocsShell({ activeSlug = "readme" }) {
   const active = getDoc(activeSlug);
+  const normalizedContent = active.content.replace(/\r\n?/g, "\n").replace(/\n$/, "");
 
   return (
     <main className="docs-scene">
-      <section className="docs-shell" aria-label="evim documentation">
-        <header className="docs-header">
-          <div>
-            <p className="kicker">{site.domain}</p>
-            <h1>evim</h1>
-          </div>
-          <nav className="top-links" aria-label="Utility links">
-            <a href={site.repoUrl}>github</a>
-            <a href="/llms.txt">llms.txt</a>
+      <section className="docs-shell">
+        <div className="docs-topbar">
+          <nav className="docs-tabs" aria-label="Documentation files">
+            {docs.map((doc) => {
+              const isActive = doc.slug === active.slug;
+              return (
+                <a
+                  key={doc.slug}
+                  href={doc.href}
+                  className={isActive ? "docs-tab docs-tab-active" : "docs-tab"}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <span className="docs-tab-label">{doc.label}</span>
+                </a>
+              );
+            })}
           </nav>
-        </header>
 
-        <section className="docs-layout">
-          <aside className="doc-tabs" aria-label="Documents">
-            {docs.map((doc) => (
-              <a
-                key={doc.slug}
-                className={doc.slug === active.slug ? "doc-tab active" : "doc-tab"}
-                href={doc.slug === "readme" ? "/" : `/?doc=${doc.slug}`}
-              >
-                <span>{doc.eyebrow}</span>
-                <strong>{doc.label}</strong>
-                <em>{doc.summary}</em>
-              </a>
-            ))}
-          </aside>
+          <section className="docs-utility" aria-label="Quick links">
+            <a
+              className="docs-utility-link"
+              href={AUTHOR_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="About the Author"
+              title="About the Author"
+            >
+              About the Author
+            </a>
+            <a
+              className="docs-utility-link docs-utility-icon"
+              href={site.repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="GitHub"
+              title="GitHub"
+            >
+              <GitHubMark />
+            </a>
+          </section>
+        </div>
 
-          <article className="doc-panel">
-            <div className="doc-meta">
-              <span>{active.label}</span>
-              <div className="doc-actions">
-                <a href={active.repoHref}>source</a>
-                <CopyDocsButton value={active.content} />
-              </div>
+        <section className="docs-panel" aria-label={`${active.label} source`}>
+          <h1 className="sr-only">{active.label}</h1>
+          <div className="docs-panel-meta">
+            <span className="docs-panel-command">cat {active.label}</span>
+            <div className="docs-panel-actions">
+              <span className="docs-panel-route">{active.href}</span>
+              <CopyDocsButton content={normalizedContent} />
             </div>
-            <pre className="doc-source">
-              <code>{active.content}</code>
+          </div>
+          <div className="docs-code-scroll">
+            <pre className="docs-code-block">
+              <code>{normalizedContent}</code>
             </pre>
-          </article>
+          </div>
         </section>
       </section>
     </main>

@@ -141,7 +141,7 @@ npm run desktop
 ## Docs Website
 
 The public docs site lives in `docs_website/` and reads the checked-in README,
-agent guide, parser, and plot runtime files directly from this repo.
+agent guide, and example Markdown file directly from this repo.
 
 ```bash
 cd docs_website

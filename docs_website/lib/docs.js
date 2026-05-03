@@ -11,30 +11,20 @@ export const docs = [
   {
     slug: "readme",
     label: "README.md",
-    eyebrow: "Human Guide",
-    summary: "Install, launch, edit, render Markdown, and ship releases.",
+    href: "/",
     path: "README.md"
   },
   {
     slug: "agents",
     label: "AGENTS.md",
-    eyebrow: "Agent Guide",
-    summary: "Product boundaries, keyboard rules, and renderer constraints.",
+    href: "/?doc=agents",
     path: "AGENTS.md"
   },
   {
-    slug: "markdown",
-    label: "markdown.js",
-    eyebrow: "Parser Truth",
-    summary: "The shared Markdown parser used by the local app and notes site.",
-    path: "packages/evim-markdown/src/markdown.js"
-  },
-  {
-    slug: "plots",
-    label: "plotFrame.js",
-    eyebrow: "Plot Runtime",
-    summary: "The sandboxed equation plotting runtime behind evim-plot fences.",
-    path: "packages/evim-markdown/src/plotFrame.js"
+    slug: "example",
+    label: "EXAMPLE.md",
+    href: "/?doc=example",
+    path: "EXAMPLE.md"
   }
 ];
 
@@ -56,14 +46,12 @@ export function buildLlmsText() {
     "Primary docs:",
     `- README: ${site.url}/`,
     `- AGENTS: ${site.url}/?doc=agents`,
-    `- Markdown parser: ${site.url}/?doc=markdown`,
-    `- Plot runtime: ${site.url}/?doc=plots`,
+    `- Example Markdown: ${site.url}/?doc=example`,
     "",
     "Primary source files:",
     `- README.md: ${site.repoUrl}/blob/main/README.md`,
     `- AGENTS.md: ${site.repoUrl}/blob/main/AGENTS.md`,
-    `- packages/evim-markdown/src/markdown.js: ${site.repoUrl}/blob/main/packages/evim-markdown/src/markdown.js`,
-    `- packages/evim-markdown/src/plotFrame.js: ${site.repoUrl}/blob/main/packages/evim-markdown/src/plotFrame.js`,
+    `- EXAMPLE.md: ${site.repoUrl}/blob/main/EXAMPLE.md`,
     "",
     "Project summary:",
     "- evim is a CLI-launched local Markdown previewer with Vim-backed editing.",
