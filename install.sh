@@ -72,7 +72,7 @@ install_from_archive() {
   mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
   cp -R "$source_dir" "$APP_DIR"
   chmod +x "$APP_DIR/bvim" "$APP_DIR/bin/bvim.mjs"
-  (cd "$APP_DIR" && npm install --omit=dev && npm install --omit=dev --no-save electron@^41.3.0)
+  (cd "$APP_DIR" && npm install --omit=dev && npm install --no-save electron@^41.3.0)
   ln -sfn "$APP_DIR/bvim" "$LAUNCHER"
 
   if ! printf '%s' ":$PATH:" | grep -q ":$BIN_DIR:"; then
