@@ -210,6 +210,14 @@ function documentScrollStep(node) {
   return Math.max(96, node.clientHeight * 0.32);
 }
 
+function setScrollMeterProgress(target, progress) {
+  if (!target) {
+    return;
+  }
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 1));
+  target.style.transform = `scaleX(${clamped.toFixed(4)})`;
+}
+
 function commitTextValue(target, setValue, nextValue, start, end = start) {
   setValue(nextValue);
   placeCaret(target, start, end);
@@ -738,12 +746,12 @@ export default function App() {
   const [setupPath, setSetupPath] = useState("");
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
-  const [scrollProgress, setScrollProgress] = useState(1);
   const [keyboardLockState, setKeyboardLockState] = useState("idle");
   const commandRef = useRef(null);
   const documentRef = useRef(null);
   const editorRef = useRef(null);
   const indexRef = useRef(null);
+  const scrollMeterRef = useRef(null);
   const setupTitleRef = useRef(null);
   const setupPathRef = useRef(null);
   const shortcutsRef = useRef(null);
@@ -755,13 +763,13 @@ export default function App() {
   const updateScrollProgress = useCallback(() => {
     const node = documentRef.current;
     if (!node) {
-      setScrollProgress(1);
+      setScrollMeterProgress(scrollMeterRef.current, 1);
       return;
     }
 
     const maxScroll = node.scrollHeight - node.clientHeight;
     const nextProgress = maxScroll > 0 ? node.scrollTop / maxScroll : 1;
-    setScrollProgress(Math.max(0, Math.min(1, nextProgress)));
+    setScrollMeterProgress(scrollMeterRef.current, nextProgress);
   }, []);
 
   const loadDocument = useCallback(async (nextFile = START_FILE, { silent = false } = {}) => {
@@ -1123,7 +1131,8 @@ export default function App() {
       return;
     }
     node.scrollBy({ top: direction * documentScrollStep(node), behavior: "auto" });
-  }, []);
+    updateScrollProgress();
+  }, [updateScrollProgress]);
 
   const scrollDocumentHalfPage = useCallback((direction) => {
     const node = documentRef.current;
@@ -1131,7 +1140,8 @@ export default function App() {
       return;
     }
     node.scrollBy({ top: direction * node.clientHeight * 0.5, behavior: "auto" });
-  }, []);
+    updateScrollProgress();
+  }, [updateScrollProgress]);
 
   const scrollDocumentTo = useCallback((position) => {
     const node = documentRef.current;
@@ -1139,7 +1149,8 @@ export default function App() {
       return;
     }
     node.scrollTo({ top: position, behavior: "auto" });
-  }, []);
+    updateScrollProgress();
+  }, [updateScrollProgress]);
 
   const runCommand = useCallback(
     async (rawCommand) => {
@@ -1622,7 +1633,7 @@ export default function App() {
       </section>
 
       <div className="scroll-meter" aria-hidden="true">
-        <span style={{ transform: `scaleX(${scrollProgress})` }} />
+        <span ref={scrollMeterRef} />
       </div>
 
       {shortcutsOpen && <ShortcutsOverlay refValue={shortcutsRef} onClose={() => setShortcutsOpen(false)} />}
