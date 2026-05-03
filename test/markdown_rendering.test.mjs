@@ -108,3 +108,20 @@ test("inline parsing keeps text newlines around inline markup", () => {
     { type: "math", value: "three" }
   ]);
 });
+
+test("inline parsing supports dollar and paren latex delimiters", () => {
+  assert.deepEqual(inlineParts("growth like \\(e^t\\), then $\\ln(x)$."), [
+    { type: "text", value: "growth like " },
+    { type: "math", value: "e^t" },
+    { type: "text", value: ", then " },
+    { type: "math", value: "\\ln(x)" },
+    { type: "text", value: "." }
+  ]);
+});
+
+test("inline parsing leaves escaped dollars as text", () => {
+  assert.deepEqual(inlineParts("cost \\$5 and $x^2$"), [
+    { type: "text", value: "cost \\$5 and " },
+    { type: "math", value: "x^2" }
+  ]);
+});

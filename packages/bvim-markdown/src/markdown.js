@@ -203,25 +203,60 @@ export function headingIndexFromNodes(nodes) {
 export function inlineParts(value) {
   const parts = [];
   const source = String(value || "");
-  const pattern = /(`[^`]+`|\$[^$\n]+\$)/g;
   let lastIndex = 0;
-  let match;
 
-  while ((match = pattern.exec(source))) {
-    if (match.index > lastIndex) {
-      parts.push({ type: "text", value: source.slice(lastIndex, match.index) });
+  const pushText = (endIndex) => {
+    if (endIndex > lastIndex) {
+      parts.push({ type: "text", value: source.slice(lastIndex, endIndex) });
     }
-    const token = match[0];
-    if (token.startsWith("`")) {
-      parts.push({ type: "code", value: token.slice(1, -1) });
-    } else {
-      parts.push({ type: "math", value: token.slice(1, -1) });
+  };
+
+  const closingDollarIndex = (startIndex) => {
+    for (let index = startIndex + 1; index < source.length; index += 1) {
+      if (source[index] === "\n") {
+        return -1;
+      }
+      if (source[index] === "$" && source[index - 1] !== "\\" && source[index + 1] !== "$") {
+        return index;
+      }
     }
-    lastIndex = match.index + token.length;
+    return -1;
+  };
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] === "`") {
+      const close = source.indexOf("`", index + 1);
+      if (close > index + 1) {
+        pushText(index);
+        parts.push({ type: "code", value: source.slice(index + 1, close) });
+        index = close;
+        lastIndex = close + 1;
+      }
+      continue;
+    }
+
+    if (source.startsWith("\\(", index)) {
+      const close = source.indexOf("\\)", index + 2);
+      if (close > index + 2) {
+        pushText(index);
+        parts.push({ type: "math", value: source.slice(index + 2, close) });
+        index = close + 1;
+        lastIndex = close + 2;
+      }
+      continue;
+    }
+
+    if (source[index] === "$" && source[index - 1] !== "\\" && source[index + 1] !== "$") {
+      const close = closingDollarIndex(index);
+      if (close > index + 1) {
+        pushText(index);
+        parts.push({ type: "math", value: source.slice(index + 1, close) });
+        index = close;
+        lastIndex = close + 1;
+      }
+    }
   }
 
-  if (lastIndex < source.length) {
-    parts.push({ type: "text", value: source.slice(lastIndex) });
-  }
+  pushText(source.length);
   return parts;
 }
