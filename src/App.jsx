@@ -743,6 +743,7 @@ export default function App() {
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
   const pendingKeyRef = useRef("");
+  const documentScrollRef = useRef({ direction: 0, frame: 0, lastTime: 0, stopTimer: 0 });
   const parsedNodes = useMemo(() => parseMarkdown(markdown), [markdown]);
   const headingIndex = useMemo(() => headingIndexFromNodes(parsedNodes), [parsedNodes]);
 
@@ -1111,22 +1112,83 @@ export default function App() {
     });
   }, [headingIndex.length]);
 
-  const scrollDocumentBy = useCallback((direction) => {
-    const node = documentRef.current;
-    if (!node) {
-      return;
+  const stopDocumentScroll = useCallback(() => {
+    const state = documentScrollRef.current;
+    state.direction = 0;
+    state.lastTime = 0;
+    if (state.frame) {
+      window.cancelAnimationFrame(state.frame);
+      state.frame = 0;
     }
-    const distance = Math.max(96, node.clientHeight * 0.32);
-    node.scrollBy({ top: direction * distance, behavior: "smooth" });
+    if (state.stopTimer) {
+      window.clearTimeout(state.stopTimer);
+      state.stopTimer = 0;
+    }
   }, []);
+
+  const animateDocumentScroll = useCallback(
+    (time) => {
+      const state = documentScrollRef.current;
+      const node = documentRef.current;
+      if (!state.direction || !node) {
+        stopDocumentScroll();
+        return;
+      }
+
+      const lastTime = state.lastTime || time;
+      const elapsed = Math.max(0, Math.min(34, time - lastTime));
+      const pixelsPerSecond = Math.max(720, Math.min(1700, node.clientHeight * 2.1));
+      state.lastTime = time;
+      node.scrollTop += state.direction * pixelsPerSecond * (elapsed / 1000);
+      updateScrollProgress();
+      state.frame = window.requestAnimationFrame(animateDocumentScroll);
+    },
+    [stopDocumentScroll, updateScrollProgress]
+  );
+
+  const startDocumentScroll = useCallback(
+    (direction) => {
+      const node = documentRef.current;
+      if (!node) {
+        return;
+      }
+      const state = documentScrollRef.current;
+      state.direction = direction;
+      if (state.stopTimer) {
+        window.clearTimeout(state.stopTimer);
+      }
+      state.stopTimer = window.setTimeout(stopDocumentScroll, 120);
+      if (!state.frame) {
+        state.lastTime = 0;
+        state.frame = window.requestAnimationFrame(animateDocumentScroll);
+      }
+    },
+    [animateDocumentScroll, stopDocumentScroll]
+  );
 
   const scrollDocumentTo = useCallback((position) => {
     const node = documentRef.current;
     if (!node) {
       return;
     }
+    stopDocumentScroll();
     node.scrollTo({ top: position, behavior: "smooth" });
-  }, []);
+  }, [stopDocumentScroll]);
+
+  useEffect(() => {
+    const onKeyUp = (event) => {
+      if (event.key === "j" || event.key === "k" || event.key === "ArrowDown" || event.key === "ArrowUp") {
+        stopDocumentScroll();
+      }
+    };
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", stopDocumentScroll);
+    return () => {
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", stopDocumentScroll);
+      stopDocumentScroll();
+    };
+  }, [stopDocumentScroll]);
 
   const runCommand = useCallback(
     async (rawCommand) => {
@@ -1398,13 +1460,13 @@ export default function App() {
 
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault();
-        scrollDocumentBy(1);
+        startDocumentScroll(1);
         return;
       }
 
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
-        scrollDocumentBy(-1);
+        startDocumentScroll(-1);
         return;
       }
 
@@ -1456,9 +1518,9 @@ export default function App() {
     recentDocuments,
     recentIndex,
     reloadDocument,
-    scrollDocumentBy,
     scrollDocumentTo,
     shortcutsOpen,
+    startDocumentScroll,
     toggleDocumentIndex
   ]);
 
