@@ -10,6 +10,7 @@
     "./markdown": "./packages/bvim-markdown/src/index.js",
     "./markdown/markdown": "./packages/bvim-markdown/src/markdown.js",
     "./markdown/latex": "./packages/bvim-markdown/src/latex.js",
+    "./markdown/noteIndex": "./packages/bvim-markdown/src/noteIndex.js",
     "./markdown/plotFrame": "./packages/bvim-markdown/src/plotFrame.js"
   },
   "bin": {

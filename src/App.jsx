@@ -563,6 +563,9 @@ function MarkdownDocument({ markdown, fileName }) {
           return (
             <NumberedLine key={index} line={node.line} className="heading-line">
               <Tag>
+                <span className="heading-marker" aria-hidden="true">
+                  {"#".repeat(node.level)}{" "}
+                </span>
                 <MarkdownInline value={node.value} />
               </Tag>
             </NumberedLine>
