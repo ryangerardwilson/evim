@@ -402,9 +402,13 @@ app.get("/api/recent-documents", async (_req, res) => {
 app.get("/api/document", async (req, res) => {
   try {
     const { file, fullPath } = resolveDocumentPath(req.query.file);
+    const shouldRemember = req.query.remember === "1";
     try {
       const stats = await fs.stat(fullPath);
       const markdown = await fs.readFile(fullPath, "utf8");
+      if (shouldRemember) {
+        await rememberRecentDocument(fullPath);
+      }
       res.json({
         file,
         fullPath,

@@ -840,6 +840,12 @@ textarea:focus {
   gap: 6px;
 }
 
+.setup-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
 .recent-list {
   max-height: min(44vh, 360px);
   overflow: auto;

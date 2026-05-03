@@ -44,6 +44,16 @@ const SHORTCUT_GROUPS = [
     ]
   },
   {
+    title: "setup",
+    items: [
+      ["n", "new document"],
+      ["o", "open markdown path"],
+      ["j / k", "move recent selection"],
+      ["enter", "open selected recent"],
+      ["esc / ctrl+[", "back"]
+    ]
+  },
+  {
     title: "typing",
     items: [
       ["esc / ctrl+[", "normal mode"],
@@ -748,6 +758,7 @@ export default function App() {
   const [headingIndexSelection, setHeadingIndexSelection] = useState(0);
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
   const [creatingDocument, setCreatingDocument] = useState(false);
+  const [openingDocument, setOpeningDocument] = useState(false);
   const [recentDocuments, setRecentDocuments] = useState([]);
   const [recentIndex, setRecentIndex] = useState(0);
   const [setupTitle, setSetupTitle] = useState("");
@@ -780,23 +791,33 @@ export default function App() {
     setScrollMeterProgress(scrollMeterRef.current, nextProgress);
   }, []);
 
-  const loadDocument = useCallback(async (nextFile = START_FILE, { silent = false } = {}) => {
-    const response = await fetch(`/api/document?file=${encodeURIComponent(nextFile)}`);
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error || "Unable to open markdown");
-    }
-    const document = await response.json();
-    setFileName(document.file || nextFile || START_FILE);
-    setTitle(document.title || nextFile || "document");
-    setMarkdown(document.markdown || "");
-    setMtimeMs(document.mtimeMs ?? null);
-    setClosed(false);
-    setNeedsDocument(false);
-    if (!silent) {
-      setMessage(`${document.file || nextFile} loaded`);
-    }
-  }, []);
+  const loadDocument = useCallback(
+    async (nextFile = START_FILE, { silent = false, requireExists = false, remember = false } = {}) => {
+      const query = new URLSearchParams({ file: nextFile });
+      if (remember) {
+        query.set("remember", "1");
+      }
+      const response = await fetch(`/api/document?${query.toString()}`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Unable to open markdown");
+      }
+      const document = await response.json();
+      if (requireExists && !document.exists) {
+        throw new Error(`document not found: ${nextFile}`);
+      }
+      setFileName(document.file || nextFile || START_FILE);
+      setTitle(document.title || nextFile || "document");
+      setMarkdown(document.markdown || "");
+      setMtimeMs(document.mtimeMs ?? null);
+      setClosed(false);
+      setNeedsDocument(false);
+      if (!silent) {
+        setMessage(`${document.file || nextFile} loaded`);
+      }
+    },
+    []
+  );
 
   const reloadDocument = useCallback(
     async ({ silent = false } = {}) => {
@@ -818,9 +839,11 @@ export default function App() {
       const documents = Array.isArray(payload.documents) ? payload.documents : [];
       setRecentDocuments(documents);
       setRecentIndex(0);
+      setOpeningDocument(false);
       setCreatingDocument(documents.length === 0);
-      setMessage(documents.length ? "select recent or create new" : "name document");
+      setMessage(documents.length ? "select recent, open path, or create new" : "name document");
     } catch (error) {
+      setOpeningDocument(false);
       setCreatingDocument(true);
       setMessage(error.message);
     }
@@ -889,8 +912,9 @@ export default function App() {
       }
 
       if (existing.exists) {
-        await loadDocument(targetFile);
+        await loadDocument(targetFile, { remember: true });
         setCreatingDocument(false);
+        setOpeningDocument(false);
         setPathCompletions([]);
         return;
       }
@@ -906,6 +930,7 @@ export default function App() {
       }
       await loadDocument(targetFile);
       setCreatingDocument(false);
+      setOpeningDocument(false);
       setPathCompletions([]);
       setMode("normal");
       setMessage(`${saved.file || targetFile} created`);
@@ -916,14 +941,39 @@ export default function App() {
     }
   }, [loadDocument, setupPath, setupTitle]);
 
+  const openPathDocument = useCallback(async () => {
+    const targetFile = setupPath.trim();
+    if (!targetFile || targetFile === "~" || targetFile === "~/") {
+      setMessage("document path required");
+      setupPathRef.current?.focus();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await loadDocument(targetFile, { requireExists: true, remember: true });
+      setCreatingDocument(false);
+      setOpeningDocument(false);
+      setPathCompletions([]);
+      setPathCompletionIndex(-1);
+      setMode("normal");
+    } catch (error) {
+      setMessage(error.message);
+      setupPathRef.current?.focus();
+    } finally {
+      setSaving(false);
+    }
+  }, [loadDocument, setupPath]);
+
   const openRecentDocument = useCallback(
     async (document) => {
       if (!document?.path) {
         return;
       }
       try {
-        await loadDocument(document.path);
+        await loadDocument(document.path, { remember: true });
         setCreatingDocument(false);
+        setOpeningDocument(false);
       } catch (error) {
         setMessage(error.message);
         loadRecentDocuments();
@@ -931,6 +981,24 @@ export default function App() {
     },
     [loadDocument, loadRecentDocuments]
   );
+
+  const startCreatingDocument = useCallback(() => {
+    setCreatingDocument(true);
+    setOpeningDocument(false);
+    setPathCompletions([]);
+    setPathCompletionIndex(-1);
+    setMessage("name document");
+    window.requestAnimationFrame(() => setupTitleRef.current?.focus());
+  }, []);
+
+  const startOpeningDocument = useCallback(() => {
+    setOpeningDocument(true);
+    setCreatingDocument(false);
+    setPathCompletions([]);
+    setPathCompletionIndex(-1);
+    setMessage("enter markdown path");
+    window.requestAnimationFrame(() => setupPathRef.current?.focus());
+  }, []);
 
   const applySetupPathValue = useCallback((nextValue) => {
     setSetupPath(nextValue);
@@ -984,13 +1052,17 @@ export default function App() {
   const returnToRecentMenu = useCallback(() => {
     if (recentDocuments.length > 0) {
       setCreatingDocument(false);
+      setOpeningDocument(false);
       setPathCompletions([]);
       setPathCompletionIndex(-1);
-      setMessage("select recent or create new");
+      setMessage("select recent, open path, or create new");
       window.requestAnimationFrame(() => editorRef.current?.focus());
       return;
     }
-    editorRef.current?.focus();
+    setOpeningDocument(false);
+    setCreatingDocument(true);
+    setMessage("name document");
+    window.requestAnimationFrame(() => setupTitleRef.current?.focus());
   }, [recentDocuments.length]);
 
   const handleSetupPathKeyDown = useCallback(
@@ -1023,7 +1095,7 @@ export default function App() {
           setPathCompletions([]);
           setPathCompletionIndex(-1);
         },
-        onEnter: createNamedDocument,
+        onEnter: openingDocument ? openPathDocument : createNamedDocument,
         onEscape: returnToRecentMenu
       });
     },
@@ -1031,6 +1103,8 @@ export default function App() {
       applySetupPathValue,
       completeSetupPath,
       createNamedDocument,
+      openPathDocument,
+      openingDocument,
       pathCompletionIndex,
       pathCompletions,
       returnToRecentMenu
@@ -1202,7 +1276,7 @@ export default function App() {
 
         if (value.startsWith("e ")) {
           const [, ...nameParts] = value.split(/\s+/);
-          await loadDocument(nameParts.join(" "));
+          await loadDocument(nameParts.join(" "), { remember: true });
           setMode("normal");
           return;
         }
@@ -1265,10 +1339,14 @@ export default function App() {
       setupTitleRef.current?.focus();
       return;
     }
+    if (needsDocument && openingDocument) {
+      setupPathRef.current?.focus();
+      return;
+    }
     if (needsDocument) {
       editorRef.current?.focus();
     }
-  }, [creatingDocument, needsDocument]);
+  }, [creatingDocument, needsDocument, openingDocument]);
 
   useEffect(() => {
     const unsubscribe = window.bvimDesktop?.onControlKey?.((key) => {
@@ -1376,12 +1454,17 @@ export default function App() {
 
         if (event.key === "n") {
           event.preventDefault();
-          setCreatingDocument(true);
-          window.requestAnimationFrame(() => setupTitleRef.current?.focus());
+          startCreatingDocument();
           return;
         }
 
-        if (!creatingDocument && recentDocuments.length) {
+        if (event.key === "o") {
+          event.preventDefault();
+          startOpeningDocument();
+          return;
+        }
+
+        if (!creatingDocument && !openingDocument && recentDocuments.length) {
           if (event.key === "j" || event.key === "ArrowDown") {
             event.preventDefault();
             setRecentIndex((index) => Math.min(recentDocuments.length - 1, index + 1));
@@ -1497,6 +1580,7 @@ export default function App() {
     needsDocument,
     openExternalEditor,
     openRecentDocument,
+    openingDocument,
     recentDocuments,
     recentIndex,
     reloadDocument,
@@ -1504,6 +1588,8 @@ export default function App() {
     scrollDocumentStep,
     scrollDocumentTo,
     shortcutsOpen,
+    startCreatingDocument,
+    startOpeningDocument,
     toggleDocumentIndex
   ]);
 
@@ -1520,12 +1606,50 @@ export default function App() {
   }
 
   if (needsDocument) {
+    const showRecentDocuments = !creatingDocument && !openingDocument && recentDocuments.length > 0;
+    const showNewDocumentForm = creatingDocument || (!openingDocument && recentDocuments.length === 0);
+    const showOpenDocumentForm = openingDocument;
+    const setupPathField = (
+      <label>
+        <span>path</span>
+        <input
+          ref={setupPathRef}
+          value={setupPath}
+          placeholder="~/"
+          onChange={(event) => {
+            setSetupPath(event.target.value);
+            setPathCompletions([]);
+            setPathCompletionIndex(-1);
+          }}
+          onKeyDown={handleSetupPathKeyDown}
+          aria-label={openingDocument ? "Markdown file path" : "Document path"}
+        />
+        {pathCompletions.length > 0 && (
+          <div className="path-completions" aria-label="Path completions">
+            {pathCompletions.slice(0, 6).map((completion, index) => (
+              <div
+                key={`${completion.value}-${index}`}
+                className={cx("path-completion", index === pathCompletionIndex && "active")}
+              >
+                <span>{completion.value}</span>
+                <em>{completion.type}</em>
+              </div>
+            ))}
+          </div>
+        )}
+      </label>
+    );
+
     return (
       <main className="setup-screen" ref={editorRef} tabIndex={-1}>
         <form
           className="setup-form"
           onSubmit={(event) => {
             event.preventDefault();
+            if (openingDocument) {
+              openPathDocument();
+              return;
+            }
             createNamedDocument();
           }}
         >
@@ -1534,7 +1658,7 @@ export default function App() {
             <span>bvim</span>
           </div>
 
-          {!creatingDocument && recentDocuments.length > 0 && (
+          {showRecentDocuments && (
             <section className="recent-documents" aria-label="Recent documents">
               <div className="setup-section-title">recent files</div>
               <div className="recent-list">
@@ -1551,26 +1675,33 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <button type="button" className="secondary-action" onClick={() => setCreatingDocument(true)}>
-                new document
-              </button>
+              <div className="setup-actions">
+                <button type="button" className="secondary-action" onClick={startCreatingDocument}>
+                  new document
+                </button>
+                <button type="button" className="secondary-action" onClick={startOpeningDocument}>
+                  open path
+                </button>
+              </div>
             </section>
           )}
 
-          {(creatingDocument || recentDocuments.length === 0) && (
+          {showNewDocumentForm && (
             <>
-              {recentDocuments.length > 0 && (
+              <div className="setup-actions">
+                {recentDocuments.length > 0 && (
+                  <button type="button" className="secondary-action" onClick={returnToRecentMenu}>
+                    recent files
+                  </button>
+                )}
                 <button
                   type="button"
                   className="secondary-action"
-                  onClick={() => {
-                    setCreatingDocument(false);
-                    editorRef.current?.focus();
-                  }}
+                  onClick={startOpeningDocument}
                 >
-                  recent files
+                  open path
                 </button>
-              )}
+              </div>
               <label>
                 <span>document name</span>
                 <input
@@ -1587,36 +1718,28 @@ export default function App() {
                   aria-label="Document name"
                 />
               </label>
-              <label>
-                <span>path</span>
-                <input
-                  ref={setupPathRef}
-                  value={setupPath}
-                  placeholder="~/"
-                  onChange={(event) => {
-                    setSetupPath(event.target.value);
-                    setPathCompletions([]);
-                    setPathCompletionIndex(-1);
-                  }}
-                  onKeyDown={handleSetupPathKeyDown}
-                  aria-label="Document path"
-                />
-                {pathCompletions.length > 0 && (
-                  <div className="path-completions" aria-label="Path completions">
-                    {pathCompletions.slice(0, 6).map((completion, index) => (
-                      <div
-                        key={`${completion.value}-${index}`}
-                        className={cx("path-completion", index === pathCompletionIndex && "active")}
-                      >
-                        <span>{completion.value}</span>
-                        <em>{completion.type}</em>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </label>
+              {setupPathField}
               <button type="submit" disabled={saving}>
                 {saving ? "creating" : "create"}
+              </button>
+            </>
+          )}
+
+          {showOpenDocumentForm && (
+            <>
+              <div className="setup-actions">
+                {recentDocuments.length > 0 && (
+                  <button type="button" className="secondary-action" onClick={returnToRecentMenu}>
+                    recent files
+                  </button>
+                )}
+                <button type="button" className="secondary-action" onClick={startCreatingDocument}>
+                  new document
+                </button>
+              </div>
+              {setupPathField}
+              <button type="submit" disabled={saving}>
+                {saving ? "opening" : "open"}
               </button>
             </>
           )}

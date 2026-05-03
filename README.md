@@ -32,12 +32,16 @@ bvim -v
 bvim -u
 ```
 
-Running `bvim` with no file shows recent `.md` files and an option to create a
-named Markdown document. There is no untitled scratch document.
+Running `bvim` with no file shows recent `.md` files, an option to create a
+named Markdown document, and an option to open an existing `.md` file by path.
+There is no untitled scratch document.
 
 In that flow, the document name is the filename. A path without a `.md` suffix
 is treated as a directory, so `hello.md` plus `~/Documents/bvim` creates
 `~/Documents/bvim/hello.md`.
+
+In the recent-file screen, `n` starts the new-document flow and `o` opens the
+path-entry flow. Path fields support `Tab` and `Ctrl+I` completions.
 
 Each `bvim <file>` command starts its own local server on the first available
 port at or above `8000`, so multiple Markdown files can be open at the same

@@ -28,7 +28,7 @@ flags:
     upgrade through the installer
 
 features:
-  choose a recent Markdown document or create a new one
+  choose a recent Markdown document, create a new one, or open a path
   # bvim
   bvim
 
@@ -252,12 +252,81 @@ async function promptForDocument({ allowBack = false } = {}) {
   }
 }
 
+function renderOpenPathPrompt({ rawPath, message = "" }) {
+  process.stdout.write("\x1b[2J\x1b[H");
+  process.stdout.write("bvim open path\n\n");
+  process.stdout.write(`path: ${rawPath}_\n`);
+  process.stdout.write("\nenter open  esc back\n");
+  if (message) {
+    process.stdout.write(`${message}\n`);
+  }
+}
+
+async function promptForOpenPath({ allowBack = false } = {}) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return { type: "back" };
+  }
+
+  let rawPath = "";
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  renderOpenPathPrompt({ rawPath });
+
+  try {
+    return await new Promise((resolve) => {
+      const onKeypress = (text, key) => {
+        if (key.name === "escape") {
+          process.stdin.off("keypress", onKeypress);
+          resolve(allowBack ? { type: "back" } : null);
+          return;
+        }
+
+        if (key.ctrl && key.name === "c") {
+          process.stdin.off("keypress", onKeypress);
+          resolve(null);
+          return;
+        }
+
+        if (isTerminalEnterKey(key)) {
+          const value = rawPath.trim();
+          if (!value) {
+            renderOpenPathPrompt({ rawPath, message: "document path required" });
+            return;
+          }
+          process.stdin.off("keypress", onKeypress);
+          resolve({ type: "document", filePath: normalizeDocumentPath(value) });
+          return;
+        }
+
+        if (key.name === "backspace") {
+          rawPath = rawPath.slice(0, -1);
+          renderOpenPathPrompt({ rawPath });
+          return;
+        }
+
+        if (text && !key.ctrl && !key.meta && text >= " ") {
+          rawPath = `${rawPath}${text}`;
+          renderOpenPathPrompt({ rawPath });
+        }
+      };
+
+      process.stdin.on("keypress", onKeypress);
+    });
+  } finally {
+    process.stdin.setRawMode(false);
+    process.stdout.write("\x1b[2J\x1b[H");
+  }
+}
+
 async function selectLaunchAction(documents) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return { type: "new" };
   }
 
-  const options = [{ type: "new", label: "new document" }].concat(
+  const options = [
+    { type: "new", label: "new document" },
+    { type: "path", label: "open path" }
+  ].concat(
     documents.map((document) => ({
       type: "open",
       label: formatChoice(document.path),
@@ -275,7 +344,7 @@ async function selectLaunchAction(documents) {
       const marker = itemIndex === index ? ">" : " ";
       process.stdout.write(`${marker} ${option.label}\n`);
     });
-    process.stdout.write("\nenter open  n new  j/k move  q quit\n");
+    process.stdout.write("\nenter open  n new  o path  j/k move  q quit\n");
   };
 
   try {
@@ -295,6 +364,11 @@ async function selectLaunchAction(documents) {
         if (key.name === "n") {
           process.stdin.off("keypress", onKeypress);
           resolve({ type: "new" });
+          return;
+        }
+        if (key.name === "o") {
+          process.stdin.off("keypress", onKeypress);
+          resolve({ type: "path" });
           return;
         }
         if (isTerminalEnterKey(key)) {
@@ -329,6 +403,18 @@ async function createDocumentIfMissing(filePath, title) {
     await fs.writeFile(filePath, starterDocument(filePath, title), "utf8");
     return true;
   }
+}
+
+async function requireExistingDocument(filePath) {
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.isFile()) {
+      return;
+    }
+  } catch {
+    // Use the common error below for both missing and unreadable paths.
+  }
+  throw new Error(`document not found: ${formatChoice(filePath)}`);
 }
 
 function portIsFree(port) {
@@ -440,7 +526,7 @@ async function main(argv) {
       return 0;
     }
     if (action.type === "new") {
-      const prompted = await promptForDocument({ allowBack: recentDocuments.length > 0 });
+      const prompted = await promptForDocument({ allowBack: true });
       if (!prompted) {
         return 0;
       }
@@ -449,6 +535,16 @@ async function main(argv) {
       }
       filePath = prompted.filePath;
       await createDocumentIfMissing(filePath, prompted.title);
+    } else if (action.type === "path") {
+      const prompted = await promptForOpenPath({ allowBack: true });
+      if (!prompted) {
+        return 0;
+      }
+      if (prompted.type === "back") {
+        return main([]);
+      }
+      filePath = prompted.filePath;
+      await requireExistingDocument(filePath);
     } else {
       filePath = action.filePath;
     }
