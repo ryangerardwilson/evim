@@ -8,8 +8,8 @@ evim EXAMPLE.md
 
 ## Inline Math
 
-Inline LaTeX works inside prose, so $f'(x)$ can sit next to ordinary text
-without becoming a separate block.
+Inline LaTeX works inside prose. The expression $f'(x)$ is read as "f prime of
+x" and means the derivative of $f(x)$. The prime mark is not a colon.
 
 ## Block Math
 
