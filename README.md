@@ -46,6 +46,8 @@ time.
 ## Preview
 
 - `j` and `k` scroll the Markdown preview.
+- Holding `j` or `k` stacks repeated scroll steps.
+- `Ctrl+J` and `Ctrl+K` scroll half a page down or up, and repeat when held.
 - `gg` and `G` scroll to the top and bottom.
 - `i` toggles the heading index. In the index, `j` and `k` move through
   headings, and `Enter` jumps to the selected heading.

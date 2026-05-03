@@ -1423,17 +1423,13 @@ export default function App() {
 
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault();
-        if (!event.repeat) {
-          scrollDocumentStep(1);
-        }
+        scrollDocumentStep(1);
         return;
       }
 
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
-        if (!event.repeat) {
-          scrollDocumentStep(-1);
-        }
+        scrollDocumentStep(-1);
         return;
       }
 
