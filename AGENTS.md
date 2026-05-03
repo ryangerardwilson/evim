@@ -46,7 +46,8 @@ static help path.
   inspectors, or in-browser editing unless the user explicitly asks.
 - Keep primary actions keyboard-driven and keep `?` as the shortcut reference
   overlay.
-- Keep `j` and `k` as smooth scroll controls, not item navigation.
+- Keep `j` and `k` as scroll controls, not item navigation. Do not use browser
+  smooth-scroll behavior for document navigation.
 - Keep the Electron window transparent and the page background translucent
   black, matching the active terminal opacity. Visible UI surfaces should be
   translucent black or grayscale only.

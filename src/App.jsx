@@ -16,7 +16,7 @@ const SHORTCUT_GROUPS = [
     title: "normal",
     items: [
       ["?", "toggle shortcuts"],
-      ["j / k", "smooth scroll down / up"],
+      ["j / k", "scroll down / up"],
       ["ctrl+j / ctrl+k", "half page down / up"],
       ["gg / G", "scroll top / bottom"],
       ["i", "toggle heading index"],
@@ -1093,7 +1093,7 @@ export default function App() {
         return;
       }
       const top = target.offsetTop - Math.max(12, node.clientHeight * 0.18);
-      node.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      node.scrollTo({ top: Math.max(0, top), behavior: "auto" });
       setIndexOpen(false);
       setMessage(`heading ${heading.line}`);
     },
@@ -1122,7 +1122,7 @@ export default function App() {
     if (!node) {
       return;
     }
-    node.scrollBy({ top: direction * documentScrollStep(node), behavior: "smooth" });
+    node.scrollBy({ top: direction * documentScrollStep(node), behavior: "auto" });
   }, []);
 
   const scrollDocumentHalfPage = useCallback((direction) => {
@@ -1130,7 +1130,7 @@ export default function App() {
     if (!node) {
       return;
     }
-    node.scrollBy({ top: direction * node.clientHeight * 0.5, behavior: "smooth" });
+    node.scrollBy({ top: direction * node.clientHeight * 0.5, behavior: "auto" });
   }, []);
 
   const scrollDocumentTo = useCallback((position) => {
@@ -1138,7 +1138,7 @@ export default function App() {
     if (!node) {
       return;
     }
-    node.scrollTo({ top: position, behavior: "smooth" });
+    node.scrollTo({ top: position, behavior: "auto" });
   }, []);
 
   const runCommand = useCallback(

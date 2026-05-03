@@ -45,7 +45,7 @@ time.
 
 ## Preview
 
-- `j` and `k` smooth-scroll the Markdown preview.
+- `j` and `k` scroll the Markdown preview.
 - `gg` and `G` scroll to the top and bottom.
 - `i` toggles the heading index. In the index, `j` and `k` move through
   headings, and `Enter` jumps to the selected heading.
