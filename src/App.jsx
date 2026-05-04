@@ -89,6 +89,7 @@ const KEYBOARD_LOCK_KEYS = [
   "KeyW",
   "Tab"
 ];
+const INDEX_REPEAT_STEP_MS = 140;
 let killRing = "";
 
 function cx(...parts) {
@@ -740,7 +741,6 @@ function MarkdownDocument({ markdown, fileName }) {
 function DocumentIndexOverlay({
   headings,
   selectedIndex,
-  onSelect,
   onChoose,
   onClose,
   refValue
@@ -767,7 +767,6 @@ function DocumentIndexOverlay({
                 style={{ paddingLeft: `${8 + heading.depth * 14}px` }}
                 role="option"
                 aria-selected={index === selectedIndex}
-                onMouseEnter={() => onSelect(index)}
                 onClick={() => onChoose(index)}
               >
                 <span className="index-line">{heading.line}</span>
@@ -816,6 +815,7 @@ export default function App() {
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
   const pendingKeyRef = useRef("");
+  const indexRepeatRef = useRef({ direction: 0, time: 0 });
   const parsedNodes = useMemo(() => parseMarkdown(markdown), [markdown]);
   const headingIndex = useMemo(() => headingIndexFromNodes(parsedNodes), [parsedNodes]);
 
@@ -1350,8 +1350,20 @@ export default function App() {
   useEffect(() => {
     if (indexOpen) {
       indexRef.current?.focus();
+    } else {
+      indexRepeatRef.current = { direction: 0, time: 0 };
     }
   }, [indexOpen]);
+
+  const shouldMoveDocumentIndex = useCallback((direction, event) => {
+    const now = window.performance?.now?.() ?? Date.now();
+    const lastStep = indexRepeatRef.current;
+    if (!event.repeat || lastStep.direction !== direction || now - lastStep.time >= INDEX_REPEAT_STEP_MS) {
+      indexRepeatRef.current = { direction, time: now };
+      return true;
+    }
+    return false;
+  }, []);
 
   useEffect(() => {
     if (!indexOpen) {
@@ -1469,14 +1481,18 @@ export default function App() {
         }
         if (event.key === "j" || event.key === "ArrowDown") {
           event.preventDefault();
-          setHeadingIndexSelection((index) =>
-            headingIndex.length ? Math.min(headingIndex.length - 1, index + 1) : 0
-          );
+          if (shouldMoveDocumentIndex(1, event)) {
+            setHeadingIndexSelection((index) =>
+              headingIndex.length ? Math.min(headingIndex.length - 1, index + 1) : 0
+            );
+          }
           return;
         }
         if (event.key === "k" || event.key === "ArrowUp") {
           event.preventDefault();
-          setHeadingIndexSelection((index) => Math.max(0, index - 1));
+          if (shouldMoveDocumentIndex(-1, event)) {
+            setHeadingIndexSelection((index) => Math.max(0, index - 1));
+          }
           return;
         }
         if (isEnterKey(event)) {
@@ -1627,6 +1643,7 @@ export default function App() {
     scrollDocumentHalfPage,
     scrollDocumentStep,
     scrollDocumentTo,
+    shouldMoveDocumentIndex,
     shortcutsOpen,
     startCreatingDocument,
     startOpeningDocument,
@@ -1813,7 +1830,6 @@ export default function App() {
           refValue={indexRef}
           headings={headingIndex}
           selectedIndex={headingIndexSelection}
-          onSelect={setHeadingIndexSelection}
           onChoose={jumpToHeading}
           onClose={() => setIndexOpen(false)}
         />

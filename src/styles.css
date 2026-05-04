@@ -793,10 +793,13 @@ textarea:focus {
   cursor: pointer;
 }
 
-.document-index-option.active,
-.document-index-option:hover {
+.document-index-option.active {
   border-color: var(--line-strong);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.document-index-option:focus {
+  outline: none;
 }
 
 .index-line {
