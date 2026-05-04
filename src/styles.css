@@ -322,6 +322,50 @@ button {
   padding: 0 4px;
 }
 
+.table-line {
+  margin: 0.65em 0;
+}
+
+.table-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.table-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.rendered-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rendered-table th,
+.rendered-table td {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.rendered-table th {
+  color: var(--ink);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rendered-table .table-align-center {
+  text-align: center;
+}
+
+.rendered-table .table-align-right {
+  text-align: right;
+}
+
 .code-lines {
   overflow-x: auto;
   margin: 1em 0;

@@ -5,6 +5,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ["@ryangerardwilson/docs-shell"],
   turbopack: {
     root
   }

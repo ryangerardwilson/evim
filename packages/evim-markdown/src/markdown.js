@@ -11,6 +11,71 @@ function isMarkdownBoundary(line) {
   );
 }
 
+function splitTableRow(line) {
+  let value = String(line || "").trim();
+  if (value.startsWith("|")) {
+    value = value.slice(1);
+  }
+  if (value.endsWith("|") && value[value.length - 2] !== "\\") {
+    value = value.slice(0, -1);
+  }
+
+  const cells = [];
+  let current = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\" && value[index + 1] === "|") {
+      current += "|";
+      index += 1;
+      continue;
+    }
+    if (character === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseTableDelimiter(line) {
+  const cells = splitTableRow(line);
+  if (cells.length < 2) {
+    return null;
+  }
+  const align = cells.map((cell) => {
+    if (!/^:?-{3,}:?$/.test(cell)) {
+      return null;
+    }
+    if (cell.startsWith(":") && cell.endsWith(":")) {
+      return "center";
+    }
+    if (cell.endsWith(":")) {
+      return "right";
+    }
+    return "left";
+  });
+  return align.every(Boolean) ? align : null;
+}
+
+function isTableStart(lines, index) {
+  if (index + 1 >= lines.length) {
+    return false;
+  }
+  const headers = splitTableRow(lines[index]);
+  const align = parseTableDelimiter(lines[index + 1]);
+  return headers.length >= 2 && Boolean(align) && align.length === headers.length;
+}
+
+function isTableBodyRow(line, width) {
+  if (!String(line || "").includes("|")) {
+    return false;
+  }
+  return splitTableRow(line).length === width;
+}
+
 function lineNumbers(startLine, count) {
   return Array.from({ length: Math.max(1, count) }, (_, index) => startLine + index);
 }
@@ -114,6 +179,27 @@ export function parseMarkdown(markdown) {
     if (heading) {
       nodes.push({ type: "heading", line: sourceLine, level: heading[1].length, value: heading[2] });
       index += 1;
+      continue;
+    }
+
+    if (isTableStart(lines, index)) {
+      const header = splitTableRow(lines[index]);
+      const align = parseTableDelimiter(lines[index + 1]);
+      const tableStart = index;
+      const rows = [];
+      index += 2;
+      while (index < lines.length && isTableBodyRow(lines[index], header.length)) {
+        rows.push(splitTableRow(lines[index]));
+        index += 1;
+      }
+      nodes.push({
+        type: "table",
+        line: sourceLine,
+        lineNumbers: lineNumbers(sourceLine, index - tableStart),
+        headers: header,
+        align,
+        rows
+      });
       continue;
     }
 

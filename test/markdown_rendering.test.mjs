@@ -45,6 +45,23 @@ test("line numbers follow source lines across markdown nodes", () => {
   );
 });
 
+test("pipe tables render as table nodes with source ranges", () => {
+  const nodes = parseMarkdown("| x | f(x) |\n| ---: | :--- |\n| 1 | one |\n| 2 | two |\n");
+  assert.deepEqual(nodes, [
+    {
+      type: "table",
+      line: 1,
+      lineNumbers: [1, 2, 3, 4],
+      headers: ["x", "f(x)"],
+      align: ["right", "left"],
+      rows: [
+        ["1", "one"],
+        ["2", "two"]
+      ]
+    }
+  ]);
+});
+
 test("blank source lines are numbered without adding a fake trailing row", () => {
   assert.deepEqual(parseMarkdown("one\n\nthree\n"), [
     {

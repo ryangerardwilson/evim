@@ -558,6 +558,39 @@ function PlotBlock({ value }) {
   );
 }
 
+function tableAlignClass(node, index) {
+  return node.align?.[index] ? `table-align-${node.align[index]}` : undefined;
+}
+
+function TableBlock({ node }) {
+  return (
+    <div className="table-scroll">
+      <table className="rendered-table">
+        <thead>
+          <tr>
+            {node.headers.map((header, index) => (
+              <th key={`${header}-${index}`} className={tableAlignClass(node, index)}>
+                <MarkdownInline value={header} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {node.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {node.headers.map((_, cellIndex) => (
+                <td key={cellIndex} className={tableAlignClass(node, cellIndex)}>
+                  <MarkdownInline value={row[cellIndex] || ""} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function MarkdownDocument({ markdown, fileName }) {
   const nodes = useMemo(() => parseMarkdown(markdown), [markdown]);
 
@@ -664,6 +697,13 @@ function MarkdownDocument({ markdown, fileName }) {
           return (
             <NumberedBlock key={index} lineNumbers={node.lineNumbers} className="plot-line">
               <PlotBlock value={node.value} />
+            </NumberedBlock>
+          );
+        }
+        if (node.type === "table") {
+          return (
+            <NumberedBlock key={index} lineNumbers={node.lineNumbers} className="table-line">
+              <TableBlock node={node} />
             </NumberedBlock>
           );
         }
