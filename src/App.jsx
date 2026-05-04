@@ -89,7 +89,7 @@ const KEYBOARD_LOCK_KEYS = [
   "KeyW",
   "Tab"
 ];
-const INDEX_REPEAT_STEP_MS = 75;
+const INDEX_REPEAT_STEP_MS = 50;
 let killRing = "";
 
 function cx(...parts) {
