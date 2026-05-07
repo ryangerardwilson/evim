@@ -7,7 +7,6 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { documentFileNameFromName, resolveNamedDocumentPath } from "../src/documentPaths.js";
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
@@ -28,7 +27,7 @@ flags:
     upgrade through the installer
 
 features:
-  choose a recent Markdown document, create a new one, or open a path
+  choose a recent Markdown document or create/open a path
   # evim
   evim
 
@@ -129,17 +128,6 @@ async function listRecentDocuments() {
   return documents;
 }
 
-async function resolvePromptPath(rawPath, title) {
-  const documentFileName = documentFileNameFromName(title);
-  const defaultPath = path.resolve(process.cwd(), documentFileName);
-  const value = String(rawPath || "").trim();
-  if (!value) {
-    return defaultPath;
-  }
-
-  return normalizeDocumentPath(resolveNamedDocumentPath(title, value));
-}
-
 function isTerminalEnterKey(key) {
   return (
     key.name === "return" ||
@@ -149,114 +137,11 @@ function isTerminalEnterKey(key) {
   );
 }
 
-function renderDocumentPrompt({ step, title, rawPath, message = "" }) {
-  const defaultPath = title ? path.resolve(process.cwd(), documentFileNameFromName(title)) : "";
-  process.stdout.write("\x1b[2J\x1b[H");
-  process.stdout.write("evim new document\n\n");
-  process.stdout.write(`document name: ${title}${step === "title" ? "_" : ""}\n`);
-  if (step === "path") {
-    process.stdout.write(`path [${formatChoice(defaultPath)}]: ${rawPath}_\n`);
-  } else if (title) {
-    process.stdout.write(`path [${formatChoice(defaultPath)}]:\n`);
-  }
-  process.stdout.write("\nenter next  esc back\n");
-  if (message) {
-    process.stdout.write(`${message}\n`);
-  }
-}
-
-async function promptForDocument({ allowBack = false } = {}) {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return { type: "back" };
-  }
-
-  let step = "title";
-  let title = "";
-  let rawPath = "";
-  readline.emitKeypressEvents(process.stdin);
-  process.stdin.setRawMode(true);
-  renderDocumentPrompt({ step, title, rawPath });
-
-  try {
-    return await new Promise((resolve) => {
-      const finish = async () => {
-        const filePath = await resolvePromptPath(rawPath, title);
-        process.stdin.off("keypress", onKeypress);
-        resolve({ type: "document", filePath, title });
-      };
-
-      const onKeypress = (text, key) => {
-        const activeValue = step === "title" ? title : rawPath;
-        const setActiveValue = (nextValue) => {
-          if (step === "title") {
-            title = nextValue;
-          } else {
-            rawPath = nextValue;
-          }
-        };
-
-        if (key.name === "escape") {
-          if (step === "path") {
-            step = "title";
-            renderDocumentPrompt({ step, title, rawPath });
-            return;
-          }
-          if (allowBack) {
-            process.stdin.off("keypress", onKeypress);
-            resolve({ type: "back" });
-            return;
-          }
-          process.stdin.off("keypress", onKeypress);
-          resolve(null);
-          return;
-        }
-
-        if (key.ctrl && key.name === "c") {
-          process.stdin.off("keypress", onKeypress);
-          resolve(null);
-          return;
-        }
-
-        if (isTerminalEnterKey(key)) {
-          if (step === "title") {
-            title = title.trim();
-            if (!title) {
-              renderDocumentPrompt({ step, title, rawPath, message: "document name required" });
-              return;
-            }
-            step = "path";
-            renderDocumentPrompt({ step, title, rawPath });
-            return;
-          }
-          finish();
-          return;
-        }
-
-        if (key.name === "backspace") {
-          setActiveValue(activeValue.slice(0, -1));
-          renderDocumentPrompt({ step, title, rawPath });
-          return;
-        }
-
-        if (text && !key.ctrl && !key.meta && text >= " ") {
-          setActiveValue(`${activeValue}${text}`);
-          renderDocumentPrompt({ step, title, rawPath });
-        }
-      };
-
-      process.stdin.on("keypress", onKeypress);
-    });
-  } finally {
-    process.stdin.setRawMode(false);
-    process.stdout.write("\x1b[2J\x1b[H");
-  }
-}
-
 function renderOpenPathPrompt({ rawPath, message = "" }) {
   process.stdout.write("\x1b[2J\x1b[H");
-  process.stdout.write("evim open path\n\n");
+  process.stdout.write("evim document path\n\n");
   process.stdout.write(`path: ${rawPath}_\n`);
-  process.stdout.write("\nenter open  esc back\n");
+  process.stdout.write("\nenter open/create  esc back\n");
   if (message) {
     process.stdout.write(`${message}\n`);
   }
@@ -320,12 +205,11 @@ async function promptForOpenPath({ allowBack = false } = {}) {
 
 async function selectLaunchAction(documents) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return { type: "new" };
+    return { type: "path" };
   }
 
   const options = [
-    { type: "new", label: "new document" },
-    { type: "path", label: "open path" }
+    { type: "path", label: "create or open" }
   ].concat(
     documents.map((document) => ({
       type: "open",
@@ -344,7 +228,7 @@ async function selectLaunchAction(documents) {
       const marker = itemIndex === index ? ">" : " ";
       process.stdout.write(`${marker} ${option.label}\n`);
     });
-    process.stdout.write("\nenter open  n new  o path  j/k move  q quit\n");
+    process.stdout.write("\nenter choose  j/k move  q quit\n");
   };
 
   try {
@@ -359,16 +243,6 @@ async function selectLaunchAction(documents) {
         if (key.name === "up" || key.name === "k") {
           index = Math.max(0, index - 1);
           render();
-          return;
-        }
-        if (key.name === "n") {
-          process.stdin.off("keypress", onKeypress);
-          resolve({ type: "new" });
-          return;
-        }
-        if (key.name === "o") {
-          process.stdin.off("keypress", onKeypress);
-          resolve({ type: "path" });
           return;
         }
         if (isTerminalEnterKey(key)) {
@@ -403,18 +277,6 @@ async function createDocumentIfMissing(filePath, title) {
     await fs.writeFile(filePath, starterDocument(filePath, title), "utf8");
     return true;
   }
-}
-
-async function requireExistingDocument(filePath) {
-  try {
-    const stats = await fs.stat(filePath);
-    if (stats.isFile()) {
-      return;
-    }
-  } catch {
-    // Use the common error below for both missing and unreadable paths.
-  }
-  throw new Error(`document not found: ${formatChoice(filePath)}`);
 }
 
 function portIsFree(port) {
@@ -521,32 +383,31 @@ async function main(argv) {
     }
 
     const recentDocuments = await listRecentDocuments();
-    const action = await selectLaunchAction(recentDocuments);
-    if (!action) {
-      return 0;
-    }
-    if (action.type === "new") {
-      const prompted = await promptForDocument({ allowBack: true });
+    if (recentDocuments.length === 0) {
+      const prompted = await promptForOpenPath();
       if (!prompted) {
         return 0;
       }
-      if (prompted.type === "back") {
-        return main([]);
-      }
       filePath = prompted.filePath;
-      await createDocumentIfMissing(filePath, prompted.title);
-    } else if (action.type === "path") {
-      const prompted = await promptForOpenPath({ allowBack: true });
-      if (!prompted) {
-        return 0;
-      }
-      if (prompted.type === "back") {
-        return main([]);
-      }
-      filePath = prompted.filePath;
-      await requireExistingDocument(filePath);
+      await createDocumentIfMissing(filePath);
     } else {
-      filePath = action.filePath;
+      const action = await selectLaunchAction(recentDocuments);
+      if (!action) {
+        return 0;
+      }
+      if (action.type === "path") {
+        const prompted = await promptForOpenPath({ allowBack: true });
+        if (!prompted) {
+          return 0;
+        }
+        if (prompted.type === "back") {
+          return main([]);
+        }
+        filePath = prompted.filePath;
+        await createDocumentIfMissing(filePath);
+      } else {
+        filePath = action.filePath;
+      }
     }
   } else {
     filePath = normalizeDocumentPath(argv[0]);

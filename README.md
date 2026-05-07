@@ -32,16 +32,13 @@ evim -v
 evim -u
 ```
 
-Running `evim` with no file shows recent `.md` files, an option to create a
-named Markdown document, and an option to open an existing `.md` file by path.
-There is no untitled scratch document.
+Running `evim` with no file shows a `create or open` action followed by recent
+`.md` files. There is no untitled scratch document.
 
-In that flow, the document name is the filename. A path without a `.md` suffix
-is treated as a directory, so `hello.md` plus `~/Documents/evim` creates
-`~/Documents/evim/hello.md`.
-
-In the recent-file screen, `n` starts the new-document flow and `o` opens the
-path-entry flow. Path fields support `Tab` and `Ctrl+I` completions.
+If there are no recent files, `evim` starts directly on one path input. A path
+without a `.md` suffix opens or creates the matching Markdown file. In the
+recent-file screen, `j` and `k` move through `create or open` and all recent
+files as one list. Path fields support `Tab` and `Ctrl+I` completions.
 
 Each `evim <file>` command starts its own local server on the first available
 port at or above `8000`, so multiple Markdown files can be open at the same
@@ -54,22 +51,28 @@ time.
 - `Ctrl+J` and `Ctrl+K` scroll half a page down or up, and repeat when held.
 - `gg` and `G` scroll to the top and bottom.
 - `i` toggles the heading index. In the index, `j` and `k` move through
-  headings, and `Enter` jumps to the selected heading.
-- `Enter` opens the current file in Vim in a terminal.
-- `r` reloads the Markdown from disk.
+  headings, and `Enter` or `l` jumps to the selected heading.
+- `Enter` or `l` opens the current file in Vim in a terminal.
+- `Esc` or `h` returns from the current file to the opening screen.
+- External edits to the open Markdown file refresh automatically.
 - `?` toggles the shortcut overlay.
-- `Esc` or `Ctrl+[` closes overlays or command mode.
+- `Esc`, `h`, or `Ctrl+[` closes overlays or command mode.
 - `:` opens the command line.
 - `Ctrl+C` exits evim entirely.
 - `:edit` opens the current file in Vim.
 - `:38` opens the current file in Vim at line 38 and centers that line.
 - `:e <name>` opens another `.md` file in the current document directory.
-- `:r` reloads from disk.
+- `:! <command>` runs a Bash command with `~/.bashrc` sourced and shows the
+  output in a fixed-height modal. In the output modal, `j` and `k` scroll.
 - `:lock` asks the browser shell for keyboard lock.
 
 Markdown image references such as `![caption](./image.png)` are resolved
 relative to the Markdown file. Block LaTeX is rendered from `$$ ... $$`, and
 inline LaTeX is rendered from `$...$`.
+
+The Markdown page renders left aligned and full width. Display block LaTeX and
+`evim-plot` blocks are slightly indented from text rows, and plots render at a
+fixed 500px width.
 
 Equation plots can be embedded with JavaScript-backed `evim-plot` code fences:
 

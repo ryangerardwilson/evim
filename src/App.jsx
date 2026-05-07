@@ -8,7 +8,7 @@ import {
   plotFrameSource,
   renderPlotSvg
 } from "@ryangerardwilson/evim-markdown";
-import { resolveNamedDocumentPath } from "./documentPaths.js";
+import { documentTitleFromPath } from "./documentPaths.js";
 
 function initialFileName() {
   const params = new URLSearchParams(window.location.search);
@@ -16,6 +16,8 @@ function initialFileName() {
 }
 
 const START_FILE = initialFileName();
+const MIN_LOADING_MS = 1500;
+const PLOT_WIDTH = 500;
 const SHORTCUT_GROUPS = [
   {
     title: "normal",
@@ -25,9 +27,9 @@ const SHORTCUT_GROUPS = [
       ["ctrl+j / ctrl+k", "half page down / up"],
       ["gg / G", "scroll top / bottom"],
       ["i", "toggle heading index"],
-      ["enter", "open file in vim"],
+      ["enter / l", "open file in vim"],
+      ["esc / h", "return to opening screen"],
       [":38", "open line 38 in vim"],
-      ["r", "reload markdown"],
       [":", "command line"],
       ["ctrl+c", "quit evim"]
     ]
@@ -37,20 +39,18 @@ const SHORTCUT_GROUPS = [
     items: [
       [":e path", "open markdown path"],
       [":edit", "open current file in vim"],
+      [":! cmd", "run shell command"],
       [":index", "toggle heading index"],
       [":38", "open current file at line 38"],
-      [":r", "reload current file"],
       [":lock", "request keyboard lock"]
     ]
   },
   {
     title: "setup",
     items: [
-      ["n", "new document"],
-      ["o", "open markdown path"],
-      ["j / k", "move recent selection"],
-      ["enter", "open selected recent"],
-      ["esc / ctrl+[", "back"]
+      ["j / k", "move selection"],
+      ["enter / l", "choose selected row"],
+      ["esc / h / ctrl+[", "back"]
     ]
   },
   {
@@ -83,13 +83,26 @@ const KEYBOARD_LOCK_KEYS = [
   "KeyI",
   "KeyJ",
   "KeyK",
+  "KeyL",
   "KeyM",
-  "KeyR",
   "KeyU",
   "KeyW",
   "Tab"
 ];
-const INDEX_REPEAT_STEP_MS = 50;
+const MATRIX_COLUMNS = [
+  "01001101011000110101",
+  "10110010100101101001",
+  "00101101110010010110",
+  "11001001010110100101",
+  "01101001100101101100",
+  "10010110101001011010",
+  "01011010011001010011",
+  "11100101001011010010",
+  "00110101101001001101",
+  "10100101100110100110",
+  "01001011010100110101",
+  "11010100101101001001"
+];
 let killRing = "";
 
 function cx(...parts) {
@@ -139,9 +152,28 @@ function isEnterKey(event) {
   );
 }
 
+function isNavigationEscapeKey(event) {
+  return isEscapeKey(event) || (!event.ctrlKey && !event.altKey && !event.metaKey && keyName(event) === "h");
+}
+
+function isNavigationEnterKey(event) {
+  return isEnterKey(event) || (!event.ctrlKey && !event.altKey && !event.metaKey && keyName(event) === "l");
+}
+
 function isCloseTabShortcut(event) {
   const key = keyName(event);
   return (event.ctrlKey || event.metaKey) && !event.altKey && key === "w";
+}
+
+function noStoreFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache",
+      ...(options.headers || {})
+    }
+  });
 }
 
 function isWordChar(character) {
@@ -493,33 +525,14 @@ function LatexBlock({ value }) {
 }
 
 function PlotBlock({ value }) {
-  const shellRef = useRef(null);
   const frameRef = useRef(null);
   const id = useMemo(() => `plot-${Math.random().toString(36).slice(2)}`, []);
   const [result, setResult] = useState({ ok: false, error: "", plots: null });
-  const [plotWidth, setPlotWidth] = useState(820);
   const srcDoc = useMemo(() => plotFrameSource(value, id), [id, value]);
   const rendered = useMemo(
-    () => (result.plots ? renderPlotSvg(result.plots, { width: plotWidth }) : null),
-    [plotWidth, result.plots]
+    () => (result.plots ? renderPlotSvg(result.plots, { width: PLOT_WIDTH }) : null),
+    [result.plots]
   );
-
-  useEffect(() => {
-    const node = shellRef.current;
-    if (!node) {
-      return undefined;
-    }
-    const updateWidth = () => {
-      const width = Math.floor(node.getBoundingClientRect().width);
-      if (width > 0) {
-        setPlotWidth(Math.max(300, Math.min(920, width)));
-      }
-    };
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     setResult({ ok: false, error: "", plots: null });
@@ -542,7 +555,7 @@ function PlotBlock({ value }) {
   }, [id, value]);
 
   return (
-    <div className="plot-shell" ref={shellRef}>
+    <div className="plot-shell">
       <iframe
         ref={frameRef}
         className="plot-runner-frame"
@@ -592,8 +605,36 @@ function TableBlock({ node }) {
   );
 }
 
-function MarkdownDocument({ markdown, fileName }) {
-  const nodes = useMemo(() => parseMarkdown(markdown), [markdown]);
+function MatrixLoading({ label = "loading" }) {
+  return (
+    <div className="matrix-loader" role="status" aria-live="polite">
+      <div className="matrix-rain" aria-hidden="true">
+        {MATRIX_COLUMNS.map((column, index) => (
+          <span
+            key={`${column}-${index}`}
+            style={{
+              "--delay": `${index * -0.17}s`,
+              "--duration": `${1.25 + (index % 5) * 0.18}s`
+            }}
+          >
+            {column}
+          </span>
+        ))}
+      </div>
+      <div className="matrix-status">
+        <span>{label}</span>
+        <span className="matrix-cursor" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
+function MarkdownDocument({ markdown, fileName, loading }) {
+  const nodes = useMemo(() => (loading ? [] : parseMarkdown(markdown)), [loading, markdown]);
+
+  if (loading) {
+    return <MatrixLoading />;
+  }
 
   if (!nodes.length) {
     return <div className="empty-state">empty markdown</div>;
@@ -765,6 +806,7 @@ function DocumentIndexOverlay({
                 type="button"
                 className={cx("document-index-option", index === selectedIndex && "active")}
                 style={{ paddingLeft: `${8 + heading.depth * 14}px` }}
+                data-index={index}
                 role="option"
                 aria-selected={index === selectedIndex}
                 onClick={() => onChoose(index)}
@@ -787,6 +829,7 @@ export default function App() {
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [mtimeMs, setMtimeMs] = useState(null);
+  const [documentLoading, setDocumentLoading] = useState(Boolean(START_FILE));
   const [mode, setMode] = useState("normal");
   const [command, setCommand] = useState("");
   const [message, setMessage] = useState("ready");
@@ -794,13 +837,13 @@ export default function App() {
   const [closed, setClosed] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [indexOpen, setIndexOpen] = useState(false);
+  const [shellOutput, setShellOutput] = useState(null);
+  const [shellOutputOpen, setShellOutputOpen] = useState(false);
   const [headingIndexSelection, setHeadingIndexSelection] = useState(0);
   const [needsDocument, setNeedsDocument] = useState(!START_FILE);
-  const [creatingDocument, setCreatingDocument] = useState(false);
   const [openingDocument, setOpeningDocument] = useState(false);
   const [recentDocuments, setRecentDocuments] = useState([]);
-  const [recentIndex, setRecentIndex] = useState(0);
-  const [setupTitle, setSetupTitle] = useState("");
+  const [setupSelectionIndex, setSetupSelectionIndex] = useState(0);
   const [setupPath, setSetupPath] = useState("");
   const [pathCompletions, setPathCompletions] = useState([]);
   const [pathCompletionIndex, setPathCompletionIndex] = useState(-1);
@@ -809,15 +852,61 @@ export default function App() {
   const documentRef = useRef(null);
   const editorRef = useRef(null);
   const indexRef = useRef(null);
+  const shellOutputBodyRef = useRef(null);
+  const shellOutputRef = useRef(null);
+  const setupListRef = useRef(null);
   const scrollMeterRef = useRef(null);
-  const setupTitleRef = useRef(null);
   const setupPathRef = useRef(null);
   const shortcutsRef = useRef(null);
   const forceQuitRef = useRef(false);
   const pendingKeyRef = useRef("");
-  const indexRepeatRef = useRef({ direction: 0, time: 0 });
-  const parsedNodes = useMemo(() => parseMarkdown(markdown), [markdown]);
+  const headingIndexSelectionRef = useRef(0);
+  const documentLoadingTokenRef = useRef(0);
+  const documentLoadingTimerRef = useRef(null);
+  const parsedNodes = useMemo(
+    () => (documentLoading ? [] : parseMarkdown(markdown)),
+    [documentLoading, markdown]
+  );
   const headingIndex = useMemo(() => headingIndexFromNodes(parsedNodes), [parsedNodes]);
+
+  const clearDocumentLoadingTimer = useCallback(() => {
+    if (documentLoadingTimerRef.current) {
+      window.clearTimeout(documentLoadingTimerRef.current);
+      documentLoadingTimerRef.current = null;
+    }
+  }, []);
+
+  const startDocumentLoading = useCallback(() => {
+    const token = documentLoadingTokenRef.current + 1;
+    documentLoadingTokenRef.current = token;
+    clearDocumentLoadingTimer();
+    setDocumentLoading(true);
+    return {
+      token,
+      startedAt: window.performance?.now?.() ?? Date.now()
+    };
+  }, [clearDocumentLoadingTimer]);
+
+  const finishDocumentLoading = useCallback(
+    ({ token, startedAt }) => {
+      const elapsed = (window.performance?.now?.() ?? Date.now()) - startedAt;
+      const delay = Math.max(0, MIN_LOADING_MS - elapsed);
+      clearDocumentLoadingTimer();
+      documentLoadingTimerRef.current = window.setTimeout(() => {
+        if (documentLoadingTokenRef.current === token) {
+          setDocumentLoading(false);
+        }
+        documentLoadingTimerRef.current = null;
+      }, delay);
+    },
+    [clearDocumentLoadingTimer]
+  );
+
+  const stopDocumentLoading = useCallback(() => {
+    documentLoadingTokenRef.current += 1;
+    clearDocumentLoadingTimer();
+    setDocumentLoading(false);
+  }, [clearDocumentLoadingTimer]);
 
   const updateScrollProgress = useCallback(() => {
     const node = documentRef.current;
@@ -833,41 +922,40 @@ export default function App() {
 
   const loadDocument = useCallback(
     async (nextFile = START_FILE, { silent = false, requireExists = false, remember = false } = {}) => {
-      const query = new URLSearchParams({ file: nextFile });
-      if (remember) {
-        query.set("remember", "1");
-      }
-      const response = await fetch(`/api/document?${query.toString()}`);
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Unable to open markdown");
-      }
-      const document = await response.json();
-      if (requireExists && !document.exists) {
-        throw new Error(`document not found: ${nextFile}`);
-      }
-      setFileName(document.file || nextFile || START_FILE);
-      setTitle(document.title || nextFile || "document");
-      setMarkdown(document.markdown || "");
-      setMtimeMs(document.mtimeMs ?? null);
-      setClosed(false);
-      setNeedsDocument(false);
-      if (!silent) {
-        setMessage(`${document.file || nextFile} loaded`);
+      const loadingState = silent ? null : startDocumentLoading();
+      try {
+        const query = new URLSearchParams({ file: nextFile });
+        if (remember) {
+          query.set("remember", "1");
+        }
+        const response = await noStoreFetch(`/api/document?${query.toString()}`);
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || "Unable to open markdown");
+        }
+        const document = await response.json();
+        if (requireExists && !document.exists) {
+          throw new Error(`document not found: ${nextFile}`);
+        }
+        setFileName(document.file || nextFile || START_FILE);
+        setTitle(document.title || nextFile || "document");
+        setMarkdown(document.markdown || "");
+        setMtimeMs(document.mtimeMs ?? null);
+        setClosed(false);
+        setNeedsDocument(false);
+        if (!silent) {
+          setMessage(`${document.file || nextFile} loaded`);
+        }
+      } finally {
+        if (loadingState) {
+          finishDocumentLoading(loadingState);
+        }
       }
     },
-    []
+    [finishDocumentLoading, startDocumentLoading]
   );
 
-  const reloadDocument = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!fileName) {
-        return;
-      }
-      await loadDocument(fileName, { silent });
-    },
-    [fileName, loadDocument]
-  );
+  useEffect(() => () => clearDocumentLoadingTimer(), [clearDocumentLoadingTimer]);
 
   const loadRecentDocuments = useCallback(async () => {
     try {
@@ -878,13 +966,11 @@ export default function App() {
       }
       const documents = Array.isArray(payload.documents) ? payload.documents : [];
       setRecentDocuments(documents);
-      setRecentIndex(0);
-      setOpeningDocument(false);
-      setCreatingDocument(documents.length === 0);
-      setMessage(documents.length ? "select recent, open path, or create new" : "name document");
+      setSetupSelectionIndex(0);
+      setOpeningDocument(documents.length === 0);
+      setMessage(documents.length ? "select create/open or recent file" : "enter markdown path");
     } catch (error) {
-      setOpeningDocument(false);
-      setCreatingDocument(true);
+      setOpeningDocument(true);
       setMessage(error.message);
     }
   }, []);
@@ -915,7 +1001,7 @@ export default function App() {
 
     const interval = window.setInterval(async () => {
       try {
-        const response = await fetch(`/api/document?file=${encodeURIComponent(fileName)}`);
+        const response = await noStoreFetch(`/api/document?file=${encodeURIComponent(fileName)}`);
         if (!response.ok) {
           return;
         }
@@ -934,54 +1020,7 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [fileName, mtimeMs, needsDocument]);
 
-  const createNamedDocument = useCallback(async () => {
-    const nextTitle = setupTitle.trim();
-    if (!nextTitle) {
-      setMessage("document name required");
-      setupTitleRef.current?.focus();
-      return;
-    }
-
-    const targetFile = resolveNamedDocumentPath(nextTitle, setupPath);
-    setSaving(true);
-    try {
-      const existingResponse = await fetch(`/api/document?file=${encodeURIComponent(targetFile)}`);
-      const existing = await existingResponse.json().catch(() => ({}));
-      if (!existingResponse.ok) {
-        throw new Error(existing.error || "Unable to create document");
-      }
-
-      if (existing.exists) {
-        await loadDocument(targetFile, { remember: true });
-        setCreatingDocument(false);
-        setOpeningDocument(false);
-        setPathCompletions([]);
-        return;
-      }
-
-      const saveResponse = await fetch("/api/document", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file: targetFile, markdown: starterMarkdown(nextTitle) })
-      });
-      const saved = await saveResponse.json().catch(() => ({}));
-      if (!saveResponse.ok) {
-        throw new Error(saved.error || "Save failed");
-      }
-      await loadDocument(targetFile);
-      setCreatingDocument(false);
-      setOpeningDocument(false);
-      setPathCompletions([]);
-      setMode("normal");
-      setMessage(`${saved.file || targetFile} created`);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setSaving(false);
-    }
-  }, [loadDocument, setupPath, setupTitle]);
-
-  const openPathDocument = useCallback(async () => {
+  const openOrCreatePathDocument = useCallback(async () => {
     const targetFile = setupPath.trim();
     if (!targetFile || targetFile === "~" || targetFile === "~/") {
       setMessage("document path required");
@@ -991,8 +1030,30 @@ export default function App() {
 
     setSaving(true);
     try {
-      await loadDocument(targetFile, { requireExists: true, remember: true });
-      setCreatingDocument(false);
+      const existingResponse = await noStoreFetch(`/api/document?file=${encodeURIComponent(targetFile)}`);
+      const existing = await existingResponse.json().catch(() => ({}));
+      if (!existingResponse.ok) {
+        throw new Error(existing.error || "Unable to open markdown");
+      }
+
+      if (existing.exists) {
+        await loadDocument(targetFile, { remember: true });
+      } else {
+        const saveResponse = await fetch("/api/document", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file: targetFile,
+            markdown: starterMarkdown(documentTitleFromPath(targetFile))
+          })
+        });
+        const saved = await saveResponse.json().catch(() => ({}));
+        if (!saveResponse.ok) {
+          throw new Error(saved.error || "Save failed");
+        }
+        await loadDocument(targetFile);
+        setMessage(`${saved.file || targetFile} created`);
+      }
       setOpeningDocument(false);
       setPathCompletions([]);
       setPathCompletionIndex(-1);
@@ -1012,7 +1073,6 @@ export default function App() {
       }
       try {
         await loadDocument(document.path, { remember: true });
-        setCreatingDocument(false);
         setOpeningDocument(false);
       } catch (error) {
         setMessage(error.message);
@@ -1022,23 +1082,36 @@ export default function App() {
     [loadDocument, loadRecentDocuments]
   );
 
-  const startCreatingDocument = useCallback(() => {
-    setCreatingDocument(true);
-    setOpeningDocument(false);
-    setPathCompletions([]);
-    setPathCompletionIndex(-1);
-    setMessage("name document");
-    window.requestAnimationFrame(() => setupTitleRef.current?.focus());
-  }, []);
-
   const startOpeningDocument = useCallback(() => {
     setOpeningDocument(true);
-    setCreatingDocument(false);
     setPathCompletions([]);
     setPathCompletionIndex(-1);
     setMessage("enter markdown path");
     window.requestAnimationFrame(() => setupPathRef.current?.focus());
   }, []);
+
+  const returnToOpeningScreen = useCallback(() => {
+    pendingKeyRef.current = "";
+    setShortcutsOpen(false);
+    setIndexOpen(false);
+    setShellOutputOpen(false);
+    setShellOutput(null);
+    setMode("normal");
+    setCommand("");
+    setFileName("");
+    setTitle("");
+    setMarkdown("");
+    setMtimeMs(null);
+    stopDocumentLoading();
+    setClosed(false);
+    setNeedsDocument(true);
+    setOpeningDocument(true);
+    setPathCompletions([]);
+    setPathCompletionIndex(-1);
+    setMessage("loading recent files");
+    window.history.replaceState({}, "", window.location.pathname);
+    loadRecentDocuments();
+  }, [loadRecentDocuments, stopDocumentLoading]);
 
   const applySetupPathValue = useCallback((nextValue) => {
     setSetupPath(nextValue);
@@ -1091,18 +1164,16 @@ export default function App() {
 
   const returnToRecentMenu = useCallback(() => {
     if (recentDocuments.length > 0) {
-      setCreatingDocument(false);
       setOpeningDocument(false);
       setPathCompletions([]);
       setPathCompletionIndex(-1);
-      setMessage("select recent, open path, or create new");
+      setMessage("select create/open or recent file");
       window.requestAnimationFrame(() => editorRef.current?.focus());
       return;
     }
-    setOpeningDocument(false);
-    setCreatingDocument(true);
-    setMessage("name document");
-    window.requestAnimationFrame(() => setupTitleRef.current?.focus());
+    setOpeningDocument(true);
+    setMessage("enter markdown path");
+    window.requestAnimationFrame(() => setupPathRef.current?.focus());
   }, [recentDocuments.length]);
 
   const handleSetupPathKeyDown = useCallback(
@@ -1135,16 +1206,14 @@ export default function App() {
           setPathCompletions([]);
           setPathCompletionIndex(-1);
         },
-        onEnter: openingDocument ? openPathDocument : createNamedDocument,
+        onEnter: openOrCreatePathDocument,
         onEscape: returnToRecentMenu
       });
     },
     [
       applySetupPathValue,
       completeSetupPath,
-      createNamedDocument,
-      openPathDocument,
-      openingDocument,
+      openOrCreatePathDocument,
       pathCompletionIndex,
       pathCompletions,
       returnToRecentMenu
@@ -1209,8 +1278,35 @@ export default function App() {
     }
   }, [fileName]);
 
+  const moveDocumentIndexSelection = useCallback(
+    (direction) => {
+      const nextIndex = headingIndex.length
+        ? Math.max(0, Math.min(headingIndex.length - 1, headingIndexSelectionRef.current + direction))
+        : 0;
+      headingIndexSelectionRef.current = nextIndex;
+
+      const root = indexRef.current;
+      if (!root) {
+        return;
+      }
+
+      root.querySelectorAll(".document-index-option.active").forEach((node) => {
+        node.classList.remove("active");
+        node.setAttribute("aria-selected", "false");
+      });
+
+      const nextOption = root.querySelector(`.document-index-option[data-index="${nextIndex}"]`);
+      if (nextOption) {
+        nextOption.classList.add("active");
+        nextOption.setAttribute("aria-selected", "true");
+        nextOption.scrollIntoView({ block: "nearest" });
+      }
+    },
+    [headingIndex.length]
+  );
+
   const jumpToHeading = useCallback(
-    (index = headingIndexSelection) => {
+    (index = headingIndexSelectionRef.current) => {
       const heading = headingIndex[index];
       const node = documentRef.current;
       if (!heading || !node) {
@@ -1227,7 +1323,7 @@ export default function App() {
       setIndexOpen(false);
       setMessage(`heading ${heading.line}`);
     },
-    [headingIndex, headingIndexSelection]
+    [headingIndex]
   );
 
   const toggleDocumentIndex = useCallback(() => {
@@ -1235,12 +1331,11 @@ export default function App() {
     setIndexOpen((open) => {
       const nextOpen = !open;
       if (nextOpen) {
-        setHeadingIndexSelection((index) => {
-          if (!headingIndex.length) {
-            return 0;
-          }
-          return Math.min(index, headingIndex.length - 1);
-        });
+        const nextIndex = headingIndex.length
+          ? Math.min(headingIndexSelectionRef.current, headingIndex.length - 1)
+          : 0;
+        headingIndexSelectionRef.current = nextIndex;
+        setHeadingIndexSelection(nextIndex);
         setMessage(headingIndex.length ? "index" : "no headings");
       }
       return nextOpen;
@@ -1274,6 +1369,60 @@ export default function App() {
     updateScrollProgress();
   }, [updateScrollProgress]);
 
+  const scrollShellOutput = useCallback((direction) => {
+    const node = shellOutputBodyRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollBy({ top: direction * Math.max(80, node.clientHeight * 0.28), behavior: "auto" });
+  }, []);
+
+  const runShellCommand = useCallback(
+    async (shellCommand) => {
+      const value = shellCommand.trim();
+      if (!value) {
+        setMessage("shell command required");
+        setMode("normal");
+        return;
+      }
+
+      setMode("normal");
+      setMessage(`running: ${value}`);
+      try {
+        const response = await fetch("/api/shell-command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file: fileName, command: value })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || "Shell command failed");
+        }
+        setShellOutput(payload);
+        setShellOutputOpen(true);
+        if (payload.timedOut) {
+          setMessage("shell command timed out");
+          return;
+        }
+        setMessage(payload.code === 0 ? "shell command complete" : `shell exited ${payload.code}`);
+      } catch (error) {
+        setShellOutput({
+          command: value,
+          cwd: "",
+          code: null,
+          signal: null,
+          timedOut: false,
+          truncated: false,
+          stdout: "",
+          stderr: error.message
+        });
+        setShellOutputOpen(true);
+        setMessage(error.message);
+      }
+    },
+    [fileName]
+  );
+
   const runCommand = useCallback(
     async (rawCommand) => {
       const value = rawCommand.trim();
@@ -1283,10 +1432,8 @@ export default function App() {
       }
 
       try {
-        if (value === "r" || value === "reload") {
-          await reloadDocument();
-          setMode("normal");
-          setMessage(`${fileName} reloaded`);
+        if (value.startsWith("!")) {
+          await runShellCommand(value.slice(1));
           return;
         }
 
@@ -1328,7 +1475,14 @@ export default function App() {
         setMode("normal");
       }
     },
-    [fileName, loadDocument, openExternalEditor, reloadDocument, requestKeyboardLock, toggleDocumentIndex]
+    [
+      fileName,
+      loadDocument,
+      openExternalEditor,
+      requestKeyboardLock,
+      runShellCommand,
+      toggleDocumentIndex
+    ]
   );
 
   useEffect(() => {
@@ -1348,33 +1502,30 @@ export default function App() {
   }, [shortcutsOpen]);
 
   useEffect(() => {
+    if (shellOutputOpen) {
+      shellOutputRef.current?.focus();
+    }
+  }, [shellOutputOpen]);
+
+  useEffect(() => {
+    setSetupSelectionIndex((index) => Math.min(index, recentDocuments.length));
+  }, [recentDocuments.length]);
+
+  useEffect(() => {
     if (indexOpen) {
       indexRef.current?.focus();
-    } else {
-      indexRepeatRef.current = { direction: 0, time: 0 };
     }
   }, [indexOpen]);
-
-  const shouldMoveDocumentIndex = useCallback((direction, event) => {
-    const now = window.performance?.now?.() ?? Date.now();
-    const lastStep = indexRepeatRef.current;
-    if (!event.repeat || lastStep.direction !== direction || now - lastStep.time >= INDEX_REPEAT_STEP_MS) {
-      indexRepeatRef.current = { direction, time: now };
-      return true;
-    }
-    return false;
-  }, []);
 
   useEffect(() => {
     if (!indexOpen) {
       return;
     }
-    setHeadingIndexSelection((index) => {
-      if (!headingIndex.length) {
-        return 0;
-      }
-      return Math.min(index, headingIndex.length - 1);
-    });
+    const nextIndex = headingIndex.length
+      ? Math.min(headingIndexSelectionRef.current, headingIndex.length - 1)
+      : 0;
+    headingIndexSelectionRef.current = nextIndex;
+    setHeadingIndexSelection(nextIndex);
   }, [headingIndex.length, indexOpen]);
 
   useEffect(() => {
@@ -1387,10 +1538,6 @@ export default function App() {
   }, [headingIndexSelection, indexOpen]);
 
   useEffect(() => {
-    if (needsDocument && creatingDocument) {
-      setupTitleRef.current?.focus();
-      return;
-    }
     if (needsDocument && openingDocument) {
       setupPathRef.current?.focus();
       return;
@@ -1398,7 +1545,16 @@ export default function App() {
     if (needsDocument) {
       editorRef.current?.focus();
     }
-  }, [creatingDocument, needsDocument, openingDocument]);
+  }, [needsDocument, openingDocument]);
+
+  useEffect(() => {
+    if (!needsDocument || openingDocument) {
+      return;
+    }
+    setupListRef.current?.querySelector(".setup-choice.active")?.scrollIntoView({
+      block: "nearest"
+    });
+  }, [needsDocument, openingDocument, setupSelectionIndex]);
 
   useEffect(() => {
     const unsubscribe = window.evimDesktop?.onControlKey?.((key) => {
@@ -1466,36 +1622,49 @@ export default function App() {
       }
 
       if (shortcutsOpen) {
-        if (isEscapeKey(event) || event.key === "?") {
+        if (isNavigationEscapeKey(event) || event.key === "?") {
           event.preventDefault();
           setShortcutsOpen(false);
         }
         return;
       }
 
+      if (shellOutputOpen) {
+        if (isNavigationEscapeKey(event) || event.key === "q") {
+          event.preventDefault();
+          setShellOutputOpen(false);
+          editorRef.current?.focus();
+          return;
+        }
+        if (event.key === "j" || event.key === "ArrowDown") {
+          event.preventDefault();
+          scrollShellOutput(1);
+          return;
+        }
+        if (event.key === "k" || event.key === "ArrowUp") {
+          event.preventDefault();
+          scrollShellOutput(-1);
+        }
+        return;
+      }
+
       if (indexOpen) {
-        if (isEscapeKey(event) || event.key === "i") {
+        if (isNavigationEscapeKey(event) || event.key === "i") {
           event.preventDefault();
           setIndexOpen(false);
           return;
         }
         if (event.key === "j" || event.key === "ArrowDown") {
           event.preventDefault();
-          if (shouldMoveDocumentIndex(1, event)) {
-            setHeadingIndexSelection((index) =>
-              headingIndex.length ? Math.min(headingIndex.length - 1, index + 1) : 0
-            );
-          }
+          moveDocumentIndexSelection(1);
           return;
         }
         if (event.key === "k" || event.key === "ArrowUp") {
           event.preventDefault();
-          if (shouldMoveDocumentIndex(-1, event)) {
-            setHeadingIndexSelection((index) => Math.max(0, index - 1));
-          }
+          moveDocumentIndexSelection(-1);
           return;
         }
-        if (isEnterKey(event)) {
+        if (isNavigationEnterKey(event)) {
           event.preventDefault();
           jumpToHeading();
           return;
@@ -1508,32 +1677,24 @@ export default function App() {
           return;
         }
 
-        if (event.key === "n") {
-          event.preventDefault();
-          startCreatingDocument();
-          return;
-        }
-
-        if (event.key === "o") {
-          event.preventDefault();
-          startOpeningDocument();
-          return;
-        }
-
-        if (!creatingDocument && !openingDocument && recentDocuments.length) {
+        if (!openingDocument && recentDocuments.length) {
           if (event.key === "j" || event.key === "ArrowDown") {
             event.preventDefault();
-            setRecentIndex((index) => Math.min(recentDocuments.length - 1, index + 1));
+            setSetupSelectionIndex((index) => Math.min(recentDocuments.length, index + 1));
             return;
           }
           if (event.key === "k" || event.key === "ArrowUp") {
             event.preventDefault();
-            setRecentIndex((index) => Math.max(0, index - 1));
+            setSetupSelectionIndex((index) => Math.max(0, index - 1));
             return;
           }
-          if (isEnterKey(event)) {
+          if (isNavigationEnterKey(event)) {
             event.preventDefault();
-            openRecentDocument(recentDocuments[recentIndex]);
+            if (setupSelectionIndex === 0) {
+              startOpeningDocument();
+            } else {
+              openRecentDocument(recentDocuments[setupSelectionIndex - 1]);
+            }
             return;
           }
         }
@@ -1541,6 +1702,12 @@ export default function App() {
       }
 
       if (mode === "command" || typingTarget) {
+        return;
+      }
+
+      if (isNavigationEscapeKey(event)) {
+        event.preventDefault();
+        returnToOpeningScreen();
         return;
       }
 
@@ -1552,12 +1719,6 @@ export default function App() {
           setMessage("top");
           return;
         }
-      }
-
-      if (event.ctrlKey && !event.altKey && !event.metaKey && key === "s") {
-        event.preventDefault();
-        reloadDocument().catch((error) => setMessage(error.message));
-        return;
       }
 
       if (event.ctrlKey && !event.altKey && !event.metaKey && (key === "j" || event.code === "KeyJ")) {
@@ -1612,41 +1773,37 @@ export default function App() {
         return;
       }
 
-      if (isEnterKey(event)) {
+      if (isNavigationEnterKey(event)) {
         event.preventDefault();
         openExternalEditor();
         return;
       }
 
-      if (event.key === "r") {
-        event.preventDefault();
-        reloadDocument().catch((error) => setMessage(error.message));
-      }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     closeEditor,
-    creatingDocument,
     headingIndex.length,
     indexOpen,
     jumpToHeading,
     mode,
+    moveDocumentIndexSelection,
     needsDocument,
     openExternalEditor,
     openRecentDocument,
     openingDocument,
     recentDocuments,
-    recentIndex,
-    reloadDocument,
+    returnToOpeningScreen,
     scrollDocumentHalfPage,
     scrollDocumentStep,
     scrollDocumentTo,
-    shouldMoveDocumentIndex,
+    scrollShellOutput,
+    shellOutputOpen,
     shortcutsOpen,
-    startCreatingDocument,
     startOpeningDocument,
+    setupSelectionIndex,
     toggleDocumentIndex
   ]);
 
@@ -1663,8 +1820,7 @@ export default function App() {
   }
 
   if (needsDocument) {
-    const showRecentDocuments = !creatingDocument && !openingDocument && recentDocuments.length > 0;
-    const showNewDocumentForm = creatingDocument || (!openingDocument && recentDocuments.length === 0);
+    const showSetupChoices = !openingDocument && recentDocuments.length > 0;
     const showOpenDocumentForm = openingDocument;
     const setupPathField = (
       <label>
@@ -1679,7 +1835,7 @@ export default function App() {
             setPathCompletionIndex(-1);
           }}
           onKeyDown={handleSetupPathKeyDown}
-          aria-label={openingDocument ? "Markdown file path" : "Document path"}
+          aria-label={openingDocument ? "Markdown path to open or create" : "Document path"}
         />
         {pathCompletions.length > 0 && (
           <div className="path-completions" aria-label="Path completions">
@@ -1704,99 +1860,64 @@ export default function App() {
           onSubmit={(event) => {
             event.preventDefault();
             if (openingDocument) {
-              openPathDocument();
+              openOrCreatePathDocument();
               return;
             }
-            createNamedDocument();
+            if (setupSelectionIndex === 0) {
+              startOpeningDocument();
+              return;
+            }
+            openRecentDocument(recentDocuments[setupSelectionIndex - 1]);
           }}
         >
           <div className="brand setup-brand">
-            <span className="brand-mark">b</span>
+            <span className="brand-mark">e</span>
             <span>evim</span>
           </div>
 
-          {showRecentDocuments && (
-            <section className="recent-documents" aria-label="Recent documents">
-              <div className="setup-section-title">recent files</div>
-              <div className="recent-list">
+          {showSetupChoices && (
+            <section className="setup-choices" aria-label="Documents">
+              <div ref={setupListRef} className="setup-choice-list" role="listbox" aria-label="Create or open and recent files">
+                <button
+                  type="button"
+                  className={cx("setup-choice setup-primary-choice", setupSelectionIndex === 0 && "active")}
+                  role="option"
+                  aria-selected={setupSelectionIndex === 0}
+                  onClick={startOpeningDocument}
+                  onMouseEnter={() => setSetupSelectionIndex(0)}
+                >
+                  <strong>create or open</strong>
+                </button>
                 {recentDocuments.map((document, index) => (
                   <button
                     key={document.path}
                     type="button"
-                    className={cx("recent-document", index === recentIndex && "active")}
+                    className={cx("setup-choice recent-document", index + 1 === setupSelectionIndex && "active")}
+                    role="option"
+                    aria-selected={index + 1 === setupSelectionIndex}
                     onClick={() => openRecentDocument(document)}
-                    onMouseEnter={() => setRecentIndex(index)}
+                    onMouseEnter={() => setSetupSelectionIndex(index + 1)}
                   >
                     <strong>{document.title || document.file}</strong>
                     <span>{document.file || document.path}</span>
                   </button>
                 ))}
               </div>
-              <div className="setup-actions">
-                <button type="button" className="secondary-action" onClick={startCreatingDocument}>
-                  new document
-                </button>
-                <button type="button" className="secondary-action" onClick={startOpeningDocument}>
-                  open path
-                </button>
-              </div>
             </section>
-          )}
-
-          {showNewDocumentForm && (
-            <>
-              <div className="setup-actions">
-                {recentDocuments.length > 0 && (
-                  <button type="button" className="secondary-action" onClick={returnToRecentMenu}>
-                    recent files
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={startOpeningDocument}
-                >
-                  open path
-                </button>
-              </div>
-              <label>
-                <span>document name</span>
-                <input
-                  ref={setupTitleRef}
-                  value={setupTitle}
-                  onChange={(event) => setSetupTitle(event.target.value)}
-                  onKeyDown={(event) =>
-                    handleTextControlKeyDown(event, {
-                      setValue: setSetupTitle,
-                      onEnter: () => setupPathRef.current?.focus(),
-                      onEscape: returnToRecentMenu
-                    })
-                  }
-                  aria-label="Document name"
-                />
-              </label>
-              {setupPathField}
-              <button type="submit" disabled={saving}>
-                {saving ? "creating" : "create"}
-              </button>
-            </>
           )}
 
           {showOpenDocumentForm && (
             <>
-              <div className="setup-actions">
-                {recentDocuments.length > 0 && (
+              {recentDocuments.length > 0 && (
+                <div className="setup-actions">
                   <button type="button" className="secondary-action" onClick={returnToRecentMenu}>
                     recent files
                   </button>
-                )}
-                <button type="button" className="secondary-action" onClick={startCreatingDocument}>
-                  new document
-                </button>
-              </div>
+                </div>
+              )}
               {setupPathField}
               <button type="submit" disabled={saving}>
-                {saving ? "opening" : "open"}
+                {saving ? "working" : "open or create"}
               </button>
             </>
           )}
@@ -1816,7 +1937,7 @@ export default function App() {
           aria-label="Markdown preview"
           onScroll={updateScrollProgress}
         >
-          <MarkdownDocument markdown={markdown} fileName={fileName} />
+          <MarkdownDocument markdown={markdown} fileName={fileName} loading={documentLoading} />
         </section>
       </section>
 
@@ -1825,6 +1946,14 @@ export default function App() {
       </div>
 
       {shortcutsOpen && <ShortcutsOverlay refValue={shortcutsRef} onClose={() => setShortcutsOpen(false)} />}
+      {shellOutputOpen && shellOutput && (
+        <ShellOutputModal
+          bodyRef={shellOutputBodyRef}
+          refValue={shellOutputRef}
+          result={shellOutput}
+          onClose={() => setShellOutputOpen(false)}
+        />
+      )}
       {indexOpen && (
         <DocumentIndexOverlay
           refValue={indexRef}
@@ -1868,6 +1997,68 @@ export default function App() {
         )}
       </footer>
     </main>
+  );
+}
+
+function shellStatusText(result) {
+  if (result?.timedOut) {
+    return "timed out";
+  }
+  if (result?.signal) {
+    return `signal ${result.signal}`;
+  }
+  if (typeof result?.code === "number") {
+    return `exit ${result.code}`;
+  }
+  return "finished";
+}
+
+function ShellOutputModal({ bodyRef, refValue, result, onClose }) {
+  const hasStdout = Boolean(result?.stdout);
+  const hasStderr = Boolean(result?.stderr);
+
+  return (
+    <div className="modal-layer" role="presentation" onMouseDown={onClose}>
+      <section
+        ref={refValue}
+        className="shell-output-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shell command output"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="shell-output-header">
+          <div>
+            <div className="picker-title">shell</div>
+            <code>{result.command}</code>
+          </div>
+          <button type="button" onClick={onClose}>
+            close
+          </button>
+        </header>
+        <div className="shell-output-meta">
+          <span>{shellStatusText(result)}</span>
+          {result.truncated && <span>truncated</span>}
+          {result.cwd && <span>{result.cwd}</span>}
+        </div>
+        <div ref={bodyRef} className="shell-output-body">
+          {hasStdout && (
+            <section>
+              <h2>stdout</h2>
+              <pre>{result.stdout}</pre>
+            </section>
+          )}
+          {hasStderr && (
+            <section>
+              <h2>stderr</h2>
+              <pre>{result.stderr}</pre>
+            </section>
+          )}
+          {!hasStdout && !hasStderr && <pre className="shell-output-empty">no output</pre>}
+        </div>
+      </section>
+    </div>
   );
 }
 

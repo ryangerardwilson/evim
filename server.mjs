@@ -14,9 +14,12 @@ const initialFile = process.env.EVIM_INITIAL_FILE ? path.resolve(process.env.EVI
 const port = Number(process.env.PORT || 8000);
 const stateDir = path.join(os.homedir(), ".local", "state", "evim");
 const recentPath = path.join(stateDir, "recent.json");
-const allowedRoots = Array.from(
+const shellOutputLimit = 256 * 1024;
+const shellTimeoutMs = 120000;
+const baseAllowedRoots = Array.from(
   new Set([documentsRoot, workspaceRoot, initialFile ? path.dirname(initialFile) : null].filter(Boolean))
 );
+let allowedRoots = baseAllowedRoots;
 
 await fs.mkdir(documentsDir, { recursive: true });
 
@@ -53,6 +56,14 @@ function titleFromFileName(file) {
 
 function isInsideRoot(candidate, root) {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+
+function setNoStore(res) {
+  res.set({
+    "Cache-Control": "no-store, max-age=0, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0"
+  });
 }
 
 function completionPathInfo(rawValue) {
@@ -160,9 +171,23 @@ async function readRecentDocuments() {
   }
 }
 
+async function buildAllowedRoots() {
+  const recent = await readRecentDocuments();
+  const recentRoots = recent
+    .map((entry) => path.resolve(entry.path))
+    .filter((file) => hasDocumentExtension(file))
+    .map((file) => path.dirname(file));
+  return Array.from(new Set([...baseAllowedRoots, ...recentRoots]));
+}
+
+allowedRoots = await buildAllowedRoots();
+
 async function rememberRecentDocument(fullPath) {
   const current = await readRecentDocuments();
   const absolute = path.resolve(fullPath);
+  if (!allowedRoots.some((root) => isInsideRoot(absolute, root))) {
+    allowedRoots = Array.from(new Set([...allowedRoots, path.dirname(absolute)]));
+  }
   const next = [
     { path: absolute, openedAt: Date.now() },
     ...current.filter((entry) => path.resolve(entry.path) !== absolute)
@@ -216,6 +241,107 @@ function resolveAssetPath(fileValue, assetValue) {
     throw new Error("asset path is outside the markdown directory");
   }
   return assetPath;
+}
+
+function shellCwdFromDocument(fileValue) {
+  if (!fileValue) {
+    return workspaceRoot;
+  }
+  const { fullPath } = resolveDocumentPath(fileValue);
+  return path.dirname(fullPath);
+}
+
+function appendLimitedOutput(current, chunk, state) {
+  if (state.truncated) {
+    return current;
+  }
+  const next = `${current}${chunk.toString("utf8")}`;
+  if (Buffer.byteLength(next, "utf8") <= shellOutputLimit) {
+    return next;
+  }
+  state.truncated = true;
+  return `${next.slice(0, shellOutputLimit)}\n[evim: output truncated]\n`;
+}
+
+function cleanShellOutput(value) {
+  return String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/\^@/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g, "")
+    .split(/\r?\n/)
+    .filter(
+      (line) =>
+        !/^bash: cannot set terminal process group /.test(line) &&
+        line !== "bash: no job control in this shell"
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+async function shellRunner(command) {
+  const bashrc = path.join(os.homedir(), ".bashrc");
+  if (await commandExists("script")) {
+    return {
+      executable: "script",
+      args: [
+        "-q",
+        "-e",
+        "-c",
+        `bash --rcfile ${shellQuote(bashrc)} -ic ${shellQuote(command)}`,
+        "/dev/null"
+      ]
+    };
+  }
+  return {
+    executable: "bash",
+    args: ["--rcfile", bashrc, "-ic", command]
+  };
+}
+
+async function runShellCommand(command, cwd) {
+  const runner = await shellRunner(command);
+  return new Promise((resolve, reject) => {
+    const child = spawn(runner.executable, runner.args, {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const state = { truncated: false };
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, shellTimeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout = appendLimitedOutput(stdout, chunk, state);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr = appendLimitedOutput(stderr, chunk, state);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({
+        command,
+        cwd,
+        code,
+        signal,
+        timedOut,
+        truncated: state.truncated,
+        stdout: cleanShellOutput(stdout),
+        stderr: cleanShellOutput(stderr)
+      });
+    });
+  });
 }
 
 function shellQuote(value) {
@@ -400,6 +526,7 @@ app.get("/api/recent-documents", async (_req, res) => {
 });
 
 app.get("/api/document", async (req, res) => {
+  setNoStore(res);
   try {
     const { file, fullPath } = resolveDocumentPath(req.query.file);
     const shouldRemember = req.query.remember === "1";
@@ -468,6 +595,19 @@ app.post("/api/open-editor", async (req, res) => {
     await rememberRecentDocument(fullPath);
     const terminal = await openTerminalEditor(fullPath, line);
     res.json({ ok: true, file, terminal, line });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post("/api/shell-command", async (req, res) => {
+  try {
+    const command = String(req.body?.command || "").trim();
+    if (!command) {
+      throw new Error("shell command required");
+    }
+    const cwd = shellCwdFromDocument(req.body?.file);
+    res.json(await runShellCommand(command, cwd));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

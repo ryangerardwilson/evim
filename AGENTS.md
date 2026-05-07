@@ -15,11 +15,13 @@ Preserve these entrypoints and editor actions:
 - `evim <file.md>` opens a Markdown file in the local preview shell.
 - `evim` with no file shows recent `.md` files plus document creation and file
   open flows.
-- `Enter` opens the current Markdown file in Vim.
+- `Enter` or `l` opens the current Markdown file in Vim.
+- `Esc` or `h` returns from the current Markdown file to the opening screen.
 - `:edit` opens the current Markdown file in Vim.
 - `:e <file>` opens another `.md` file in the current document directory.
+- `:! <command>` runs a Bash command with `~/.bashrc` sourced and shows the
+  output in evim.
 - `:38` opens the current Markdown file in Vim at line 38 and centers it.
-- `r` reloads from disk.
 - `i` toggles the heading index popup.
 - `?` toggles the shortcut reference overlay.
 - `Ctrl+C` exits evim.
@@ -27,18 +29,25 @@ Preserve these entrypoints and editor actions:
 Do not reintroduce `:q`, `:q!`, `:w`, `:wq`, or `:x` inside evim. Vim owns
 persistence and quitting while editing.
 
+External disk changes to the current Markdown file refresh automatically. Do
+not add manual reload commands unless the user explicitly asks for them.
+
+Shell command output should open in a centered fixed-height modal. Its output
+body owns scrolling, hides scrollbars, and scrolls with `j` and `k`.
+
 ## No-Arg Flow
 
 There must be no untitled scratch document concept.
 
 When launched as `evim`, the app must show:
 
-- recent `.md` files
-- an option to create a named document
-- an option to open an existing `.md` file by path
+- a `create or open` action for entering a `.md` path
+- recent `.md` files below it
 
-The new-document flow must collect a document name and path before opening the
-preview.
+When there are no recent documents, the setup screen should show a single path
+input that opens an existing Markdown file or creates it if it does not exist.
+When recent documents exist, `j` and `k` must move through the `create or open`
+action and all recent files as one selectable list.
 
 ## Keyboard Input
 
@@ -66,6 +75,8 @@ Keep document navigation immediate, not smooth-scrolling:
 
 - `j` and `k` scroll the preview.
 - Held `j` and `k` stack repeated immediate scroll steps.
+- `Esc` and `h` leave the current file and return to the opening screen.
+- `Enter` and `l` open the current file in Vim.
 - `Ctrl+J` and `Ctrl+K` scroll half a page.
 - Held `Ctrl+J` and `Ctrl+K` stack repeated immediate half-page scrolls.
 
@@ -101,6 +112,11 @@ Keep these rendering features first-class:
 - block LaTeX
 - inline LaTeX
 - `evim-plot` fenced plot blocks
+
+The Markdown page should render left aligned and full width. Do not reintroduce
+a centered reading column. Display block LaTeX and `evim-plot` blocks with a
+slight indentation from text rows. Plots render at a fixed 500px width; text
+wrapping is controlled by the author's source line breaks.
 
 The shared `evim/markdown` package is the source of truth for Markdown parsing
 used by evim and by public notes sites.

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   documentFileNameFromName,
+  documentTitleFromPath,
   resolveNamedDocumentPath,
   suggestedDocumentPath
 } from "../src/documentPaths.js";
@@ -21,4 +22,9 @@ test("full .md path overrides document name path joining", () => {
     resolveNamedDocumentPath("Hello Notes", "~/Documents/evim/custom.md"),
     "~/Documents/evim/custom.md"
   );
+});
+
+test("document titles can be derived from a typed path", () => {
+  assert.equal(documentTitleFromPath("~/Documents/evim/project-notes.md"), "project notes");
+  assert.equal(documentTitleFromPath("scratch_note"), "scratch note");
 });

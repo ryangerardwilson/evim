@@ -20,6 +20,12 @@ export function documentFileNameFromName(value) {
   return `${slugifyTitle(baseName)}.md`;
 }
 
+export function documentTitleFromPath(value) {
+  const rawPath = String(value || "").trim();
+  const baseName = rawPath.split(/[\\/]/).filter(Boolean).pop() || "document";
+  return baseName.replace(/\.md$/i, "").replace(/[-_]+/g, " ") || "document";
+}
+
 export function suggestedDocumentPath(title) {
   return documentFileNameFromName(title);
 }
